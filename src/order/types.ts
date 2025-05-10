@@ -1,0 +1,18 @@
+export enum OrderItemStatus {
+    CREATED = 'CREATED',
+    IN_PROGRESS = 'IN_PROGRESS',
+    PARTIALLY_DONE = 'PARTIALLY_DONE',
+    PAUSED = 'PAUSED',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED'
+  }
+  
+  export enum OrderStatus {
+    CREATED = 'CREATED',
+    CONFIRMED = 'CONFIRMED',
+    PREPARING = 'PREPARING',
+    READY = 'READY',
+    DELIVERING = 'DELIVERING',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED'
+  }

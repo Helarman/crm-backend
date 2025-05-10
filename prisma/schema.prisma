@@ -1,0 +1,387 @@
+generator client {
+  provider = "prisma-client-js"
+  enableTracing = true
+  log_level = "info"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:postgres@localhost:5432/crm?schema=public"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  email    String  @unique
+  password String?
+
+  name    String @default("Не указано")
+  picture String @default("/uploads/no-user-image.png")
+
+  role EnumUserRoles @default(NONE)
+  restaurant Restaurant[] @relation("RestaurantToUser")
+  shifts UserShift[] @relation("UserToUserShift")
+   assignedItems OrderItem[] @relation("OrderItemToUser")
+   
+  @@map("user")
+}
+
+model Restaurant {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String?
+  address     String
+  images      String[]
+  latitude    String
+  longitude   String
+  users     User[]    @relation("RestaurantToUser")
+  products  Product[] @relation("RestaurantToProduct")
+  shifts    Shift[]   @relation("RestaurantToShift")
+  orders    Order[]   @relation("OrderToRestaurant")
+  yandexEdaIntegration YandexEdaIntegration? @relation("RestaurantToYandexIntegration")
+  markups Markup[]
+  discounts   Discount[] @relation("DiscountToRestaurant")
+  @@map("restaurant")
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String
+  price       Int
+  images      String[]
+  ingredients String
+
+  restaurants   Restaurant[] @relation("RestaurantToProduct")
+
+  category   Category? @relation(fields: [categoryId], references: [id], name: "ProductToCategory")
+  categoryId String?   @map("category_id")
+  orderItems OrderItem[] @relation("OrderItemToProduct")
+  discounts Discount[] @relation("DiscountProducts")
+  additives  Additive[] @relation("ProductAdditives")
+  @@map("product")
+}
+
+model Additive {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  title     String
+  price     Int
+  products  Product[] @relation("ProductAdditives")
+  orderItems OrderItem[] @relation("OrderItemAdditives")
+
+  @@map("additive")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String
+
+  products Product[] @relation("ProductToCategory")
+  discounts   Discount[] @relation("DiscountCategories")
+  @@map("category")
+}
+
+model Shift {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  status      EnumShiftStatus @default(PLANNED)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], name: "RestaurantToShift")
+  restaurantId String     @map("restaurant_id")
+  users       UserShift[] @relation("ShiftToUserShift")
+
+  startTime   DateTime    @map("start_time")
+  endTime     DateTime?   @map("end_time")
+  description String?
+  orders      Order[]     @relation("OrderToShift")
+  @@map("shifts")
+}
+
+model UserShift {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  shiftId  String  @map("shift_id")
+  user     User    @relation(fields: [userId], references: [id], name: "UserToUserShift")
+  shift    Shift   @relation(fields: [shiftId], references: [id], name: "ShiftToUserShift")
+  
+  @@unique([userId, shiftId])
+  @@map("user_shifts")
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  phone       String   @unique
+  code        String?
+  codeExpires DateTime?
+  lastLogin   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]  @relation("OrderToCustomer")
+  
+  @@map("customer")
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  number      String      @unique @map("order_number")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  status      EnumOrderStatus @default(CREATED)
+  type        EnumOrderType   @default(DINE_IN)
+  scheduledAt DateTime?       @map("scheduled_at")
+  
+  customer    Customer?   @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
+  customerId  String?     @map("customer_id")
+  
+  restaurant  Restaurant  @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
+  restaurantId String     @map("restaurant_id")
+  
+  shift       Shift?      @relation(fields: [shiftId], references: [id], name: "OrderToShift")
+  shiftId     String?     @map("shift_id")
+  
+  items       OrderItem[] @relation("OrderToOrderItem")
+  payment     Payment?    @relation("OrderToPayment")
+  
+  totalAmount Int         @default(0) @map("total_amount")
+  comment     String?
+  yandexEdaOrder YandexEdaOrder? @relation("OrderToYandexOrder")
+  
+  deliveryAddress String? @map("delivery_address")
+  deliveryTime    DateTime? @map("delivery_time")
+  deliveryNotes   String? @map("delivery_notes")
+  appliedDiscounts Discount[] @relation("OrderDiscounts")
+  appliedMarkup   Markup?    @relation(fields: [markupId], references: [id], name: "OrderMarkups")
+  markupId        String?
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String        @id @default(cuid())
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  
+  order       Order         @relation(fields: [orderId], references: [id], name: "OrderToOrderItem")
+  orderId     String        @map("order_id")
+  
+  product     Product       @relation(fields: [productId], references: [id], name: "OrderItemToProduct")
+  productId   String        @map("product_id")
+  
+  quantity    Int           @default(1)
+  price       Int           @default(0)
+  comment     String?
+  
+  // Новые поля для статуса и пользователя
+  status      EnumOrderItemStatus @default(CREATED) @map("status")
+  startedAt   DateTime?           @map("started_at") // Когда начали готовить
+  completedAt DateTime?           @map("completed_at") // Когда завершили
+  pausedAt    DateTime?           @map("paused_at") // Когда поставили на паузу
+  
+  // Пользователь, который взял в работу
+  assignedTo  User?         @relation(fields: [assignedToId], references: [id], name: "OrderItemToUser")
+  assignedToId String?      @map("assigned_to_id")
+  
+  // Добавки к продукту в этом заказе
+  additives   Additive[]    @relation("OrderItemAdditives")
+  
+  @@map("order_items")
+}
+
+model Payment {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  order       Order       @relation(fields: [orderId], references: [id], name: "OrderToPayment")
+  orderId     String      @unique @map("order_id")
+  
+  amount      Int         @default(0)
+  method      EnumPaymentMethod
+  status      EnumPaymentStatus @default(PENDING)
+  externalId  String?     @unique @map("external_id")
+  
+  @@map("payments")
+}
+
+model YandexEdaIntegration {
+  id           String     @id @default(cuid())
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  
+  restaurant   Restaurant @relation("RestaurantToYandexIntegration", fields: [restaurantId], references: [id])
+  restaurantId String     @unique @map("restaurant_id")
+  
+  apiKey       String
+  externalId   String
+  isActive     Boolean    @default(true)
+  
+  @@map("yandex_eda_integration")
+}
+
+model YandexEdaOrder {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  order       Order    @relation("OrderToYandexOrder", fields: [orderId], references: [id])
+  orderId     String   @unique @map("order_id")
+  
+  externalId  String   @unique @map("external_id")
+  status      String
+  
+  @@map("yandex_eda_order")
+}
+
+
+model Discount {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  name        String
+  description String?
+  type        DiscountType
+  isActive    Boolean     @default(true)
+  value       Int         // Процент скидки (10 = 10%)
+
+  // Настройки применения
+  startDate   DateTime?
+  endDate     DateTime?
+  daysOfWeek  DayOfWeek[]
+  startTime   String?     // "09:00"
+  endTime     String?     // "18:00"
+  orderTypes  EnumOrderType[]
+
+  orders Order[] @relation("OrderDiscounts")
+  targetType  DiscountTargetType
+  restaurant  Restaurant[] @relation("DiscountToRestaurant")
+  restaurantId String?
+  categories  Category[]  @relation("DiscountCategories")
+  products    Product[]   @relation("DiscountProducts")
+
+  // Для промо-акций
+  promoCode   String?     @unique
+  isCashback  Boolean     @default(false)
+  cashbackValue Int?      // Процент кэшбэка
+
+  @@map("discounts")
+}
+
+model Markup {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  name        String
+  description String?
+  value       Int         // Процент наценки (10 = 10%)
+  isActive    Boolean     @default(true)
+  orderTypes  EnumOrderType[]
+  orders Order[] @relation("OrderMarkups")
+  restaurant  Restaurant? @relation(fields: [restaurantId], references: [id])
+  restaurantId String?
+
+  @@map("markups")
+}
+
+enum EnumOrderItemStatus {
+  CREATED       // Создан
+  IN_PROGRESS   // В процессе приготовления
+  PARTIALLY_DONE // Частично готов
+  PAUSED        // На паузе
+  COMPLETED     // Готов
+  CANCELLED     // Отменен
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+  BANQUET
+}
+
+enum EnumOrderType {
+  DINE_IN     // Заказ в зале
+  TAKEAWAY    // На вынос
+  DELIVERY    // Доставка
+  BANQUET     // Банкет
+}
+
+enum EnumOrderStatus {
+  CREATED
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERING
+  COMPLETED
+  CANCELLED
+}
+
+enum EnumPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum EnumPaymentMethod {
+  CASH
+  CARD
+  ONLINE
+  YANDEX     // Яндекс оплата (для заказов через Яндекс Еду)
+}
+
+enum EnumShiftStatus {
+  PLANNED
+  STARTED
+  COMPLETED
+}
+
+enum EnumUserRoles {
+  NONE
+  STOREMAN
+  COURIER
+  COOK
+  CHEF
+  WAITER
+  CASHIER
+  MANAGER
+  SUPERVISOR
+}
+
+enum DiscountType {
+  PERSONAL
+  GENERAL
+  PROMO
+}
+
+enum DiscountTargetType {
+  ALL
+  RESTAURANT
+  CATEGORY
+  PRODUCT
+}
+
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
