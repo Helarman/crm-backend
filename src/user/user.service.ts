@@ -23,7 +23,8 @@ export class UserService {
   async getAll(): Promise<PrismaUser[]> {
     return this.prisma.user.findMany({
       include: {
-        restaurant: true 
+        restaurant: true, 
+        workshops: true
       }
     });
   }
@@ -54,6 +55,7 @@ export class UserService {
     return this.prisma.user.findUnique({
       where: { id },
       include: {
+        workshops: true,
         restaurant: true 
       }
     });

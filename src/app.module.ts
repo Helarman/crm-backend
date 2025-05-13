@@ -12,6 +12,7 @@ import { CustomerVerificationModule } from './customer-verification/customer-ver
 import { DiscountModule } from './discount/discount.module'; 
 import { MarkupModule } from './markup/markup.module'; 
 import { AdditiveModule } from './additive/additive.module';
+import { WorkshopModule } from './workshop/workshop.module';
 
 @Module({
 	imports: [
@@ -20,6 +21,7 @@ import { AdditiveModule } from './additive/additive.module';
 		UserModule,
 		CategoryModule,
 		RestaurantModule,
+		WorkshopModule,
 		OrderModule,
 		ProductModule,
 		ShiftModule,

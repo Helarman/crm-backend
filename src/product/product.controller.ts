@@ -93,4 +93,13 @@ import {
 	async delete(@Param('id') id: string) {
 	  return this.productService.delete(id);
 	}
-  }
+
+	@Get(':id/prices')
+	@ApiOperation({ summary: 'Получить цены товара в ресторанах' })
+	@ApiParam({ name: 'id', description: 'ID товара' })
+	@ApiOkResponse({ description: 'Цены успешно получены' })
+	@ApiNotFoundResponse({ description: 'Товар или цены не найдены' })
+	async getRestaurantPrices(@Param('id') id: string) {
+		return this.productService.getRestaurantPrices(id);
+	}
+}

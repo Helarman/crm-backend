@@ -56,4 +56,10 @@ export class CreateOrderDto {
 
   @ApiProperty({ required: false })
   deliveryNotes?: string;
+
+  tableNumber?: string
+
+  numberOfPeople?: string
+
+  source: any
 }

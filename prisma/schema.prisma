@@ -23,9 +23,28 @@ model User {
   role EnumUserRoles @default(NONE)
   restaurant Restaurant[] @relation("RestaurantToUser")
   shifts UserShift[] @relation("UserToUserShift")
-   assignedItems OrderItem[] @relation("OrderItemToUser")
-   
+  assignedItems OrderItem[] @relation("OrderItemToUser") 
+  workshops UserWorkshop[] // Связь с цехами
   @@map("user")
+}
+model Workshop {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  name      String   @unique // Название цеха (уникальное)
+  products ProductWorkshop[]
+  users     UserWorkshop[] // Связь многие-ко-многим с пользователями
+
+  @@map("workshop")
+}
+model UserWorkshop {
+  userId     String   @map("user_id")
+  workshopId String   @map("workshop_id")
+  user       User     @relation(fields: [userId], references: [id])
+  workshop   Workshop @relation(fields: [workshopId], references: [id])
+
+  @@id([userId, workshopId])
+  @@map("user_workshop")
 }
 
 model Restaurant {
@@ -46,7 +65,19 @@ model Restaurant {
   yandexEdaIntegration YandexEdaIntegration? @relation("RestaurantToYandexIntegration")
   markups Markup[]
   discounts   Discount[] @relation("DiscountToRestaurant")
+  productPrices RestaurantProductPrice[] @relation("RestaurantPrices")
+
   @@map("restaurant")
+}
+
+model ProductWorkshop {
+  productId  String   @map("product_id")
+  workshopId String   @map("workshop_id")
+  product    Product  @relation(fields: [productId], references: [id])
+  workshop   Workshop @relation(fields: [workshopId], references: [id])
+
+  @@id([productId, workshopId])
+  @@map("product_workshop")
 }
 
 model Product {
@@ -54,20 +85,60 @@ model Product {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Основная информация
   title       String
   description String
-  price       Int
-  images      String[]
+  weight      Int?      // Вес
+  quantity    Int?      // Кол-во
+  packageQuantity Int?  @map("package_quantity") // Кол-во в упаковке
+  preparationTime Int? @map("preparation_time") // Время приготовления (в минутах)
+  price  Int
+  // Настройки
+  printLabels Boolean @default(false) @map("print_labels") // Печать лейблов
+  publishedOnWebsite Boolean @default(false) @map("published_on_website") // Публикация на сайте
+  publishedInApp Boolean @default(false) @map("published_in_app") // Публикация в приложении
+  isStopList Boolean @default(false) @map("is_stop_list") // Стоп-лист (глобальный)
+  
+  // Цех
+  workshops ProductWorkshop[]
+
+  // Контент для сайта/приложения
+  pageTitle String? @map("page_title") // Заголовок страницы
+  metaDescription String? @map("meta_description") // Мета описание
+  content String? // Контент (HTML)
+  images  String[] // Изображения для блюда
+  
+  // Ингредиенты и добавки
   ingredients String
-
+  additives  Additive[] @relation("ProductAdditives")
+  
+  // Цены (отдельная таблица для хранения цен в разных ресторанах)
+  restaurantPrices RestaurantProductPrice[] @relation("ProductPrices") 
+  
+  // Связи с другими моделями
   restaurants   Restaurant[] @relation("RestaurantToProduct")
-
   category   Category? @relation(fields: [categoryId], references: [id], name: "ProductToCategory")
   categoryId String?   @map("category_id")
   orderItems OrderItem[] @relation("OrderItemToProduct")
   discounts Discount[] @relation("DiscountProducts")
-  additives  Additive[] @relation("ProductAdditives")
+  
   @@map("product")
+}
+
+model RestaurantProductPrice {
+  id        String   @id @default(cuid())
+  product   Product  @relation(fields: [productId], references: [id], name: "ProductPrices")
+  productId String   @map("product_id")
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], name: "RestaurantPrices")
+  restaurantId String @map("restaurant_id")
+  price     Int      // Цена в этом ресторане
+  isStopList Boolean @default(false) @map("is_stop_list") // Стоп-лист для конкретного ресторана
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([productId, restaurantId])
+  @@map("restaurant_product_price")
 }
 
 model Additive {
@@ -137,16 +208,17 @@ model Customer {
 
 model Order {
   id          String      @id @default(cuid())
+  source      OrderSource @default(PANEL)
   number      String      @unique @map("order_number")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
   status      EnumOrderStatus @default(CREATED)
   type        EnumOrderType   @default(DINE_IN)
   scheduledAt DateTime?       @map("scheduled_at")
-  
+  tableNumber String?
   customer    Customer?   @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
   customerId  String?     @map("customer_id")
-  
+  numberOfPeople String?
   restaurant  Restaurant  @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
   restaurantId String     @map("restaurant_id")
   
@@ -311,6 +383,12 @@ enum OrderType {
   TAKEAWAY
   DELIVERY
   BANQUET
+}
+
+enum OrderSource {
+  MOBILE
+  SITE
+  PANEL
 }
 
 enum EnumOrderType {

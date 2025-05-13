@@ -185,6 +185,7 @@ import {
 				include:{
 					category: true,
 					additives: true,
+					restaurantPrices: true,
 				}
 			}
 		  }
