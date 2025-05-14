@@ -40,8 +40,7 @@ export class OrderService {
     const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
     // Расчет суммы
-    const totalAmount = this.calculateOrderTotal(dto.items, additives, productPrices);
-
+    const totalAmount = this.calculateOrderTotal(dto.items, additives, productPrices) + dto.deliveryZone.price;
     // Создание заказа в транзакции
     const order = await this.prisma.$transaction(async (prisma) => {
       const order = await prisma.order.create({
@@ -54,7 +53,7 @@ export class OrderService {
           shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
           type: dto.type,
           scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
-          totalAmount,
+          totalAmount: totalAmount,
           numberOfPeople: dto.numberOfPeople.toString(),
           comment: dto.comment,
           tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
@@ -83,7 +82,7 @@ export class OrderService {
             order: { connect: { id: order.id } },
             amount: order.totalAmount,
             method: dto.payment.method,
-            status: EnumPaymentStatus.PAID,
+            status: EnumPaymentStatus.PENDING,
             externalId: dto.payment.externalId,
           },
         });
@@ -453,7 +452,7 @@ export class OrderService {
       tableNumber: order.tableNumber,
       numberOfPeople: order.numberOfPeople,
       totalPrice,
-      totalAmount: order.totalAmount || totalPrice,
+      totalAmount: order.totalAmount ,
       totalItems,
       restaurantId: order.restaurantId,
       customer: order.customer ? {
@@ -486,6 +485,7 @@ export class OrderService {
         })) || [],
       })),
       payment: order.payment ? {
+        id: order.payment.id,
         method: order.payment.method,
         amount: order.payment.amount,
         status: order.payment.status,

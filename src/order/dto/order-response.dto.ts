@@ -47,6 +47,7 @@ export class OrderResponse {
   }>;
   numberOfPeople?: string
   payment?: {
+    id: string;
     method: EnumPaymentMethod;
     amount: number;
     status: EnumPaymentStatus;

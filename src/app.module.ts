@@ -13,6 +13,8 @@ import { DiscountModule } from './discount/discount.module';
 import { MarkupModule } from './markup/markup.module'; 
 import { AdditiveModule } from './additive/additive.module';
 import { WorkshopModule } from './workshop/workshop.module';
+import { PaymentsModule } from './payment/payment.module';
+import { DeliveryZoneModule } from './delivery-zone/delivery-zone.module';
 
 @Module({
 	imports: [
@@ -26,7 +28,8 @@ import { WorkshopModule } from './workshop/workshop.module';
 		ProductModule,
 		ShiftModule,
 		AdditiveModule,
-		
+		PaymentsModule,
+		DeliveryZoneModule,
 		CustomerVerificationModule,
 		DiscountModule, MarkupModule
 	]

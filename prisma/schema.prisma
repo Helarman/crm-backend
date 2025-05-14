@@ -47,6 +47,20 @@ model UserWorkshop {
   @@map("user_workshop")
 }
 
+model DeliveryZone {
+  id          String   @id @default(uuid())
+  title       String
+  price       Float
+  minOrder    Float?   @default(0) @map("min_order")
+  polygon     String   @map("polygon")
+  restaurant  Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String @map("restaurant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("delivery_zones")
+}
+
 model Restaurant {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
@@ -66,7 +80,7 @@ model Restaurant {
   markups Markup[]
   discounts   Discount[] @relation("DiscountToRestaurant")
   productPrices RestaurantProductPrice[] @relation("RestaurantPrices")
-
+  delivery_zones DeliveryZone[]
   @@map("restaurant")
 }
 
