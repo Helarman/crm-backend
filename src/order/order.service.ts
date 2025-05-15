@@ -39,8 +39,12 @@ export class OrderService {
     // Генерация уникального номера заказа
     const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
+    let deliveryPrice = 0
+    if(dto.type === "DELIVERY" ){
+      deliveryPrice = dto.deliveryZone.price
+    }
     // Расчет суммы
-    const totalAmount = this.calculateOrderTotal(dto.items, additives, productPrices) + dto.deliveryZone.price;
+    const totalAmount = this.calculateOrderTotal(dto.items, additives, productPrices) + deliveryPrice;
     // Создание заказа в транзакции
     const order = await this.prisma.$transaction(async (prisma) => {
       const order = await prisma.order.create({
@@ -323,7 +327,7 @@ export class OrderService {
     let newStatus: EnumOrderStatus | null = null;
 
     if (items.every(i => i.status === EnumOrderItemStatus.COMPLETED)) {
-      newStatus = EnumOrderStatus.COMPLETED;
+      newStatus = EnumOrderStatus.READY;
     } else if (items.some(i => i.status === EnumOrderItemStatus.IN_PROGRESS)) {
       newStatus = EnumOrderStatus.PREPARING;
     }
@@ -462,9 +466,9 @@ export class OrderService {
         email: order.customer.email,
       } : undefined,
       restaurant: {
-        id: order.restaurant.id,
-        name: order.restaurant.name,
-        address: order.restaurant.address,
+        id: order.restaurant?.id,
+        name: order.restaurant?.name,
+        address: order.restaurant?.address,
       },
       items: itemsWithTotals.map(item => ({
         id: item.id,
