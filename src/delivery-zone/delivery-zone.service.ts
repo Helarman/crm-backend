@@ -42,30 +42,36 @@ export class DeliveryZoneService {
   }
 
   
-  async findAllByRestaurant(restaurantId: string): Promise<DeliveryZoneEntity[]> {
-    await this.validateRestaurantExists(restaurantId);
+ async findAllByRestaurant(restaurantId: string): Promise<DeliveryZoneEntity[]> {
+  await this.validateRestaurantExists(restaurantId);
 
-    try {
-      const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
-        SELECT 
-          id,
-          title,
-          price,
-          min_order as "minOrder",
-          restaurant_id as "restaurantId",
-          created_at as "createdAt",
-          updated_at as "updatedAt",
-          ST_AsGeoJSON(polygon) as polygon
-        FROM delivery_zones
-        WHERE restaurant_id = ${restaurantId}
-        ORDER BY created_at DESC
-      `;
+  try {
+    // Сначала проверяем доступность PostGIS функций
+    await this.prisma.$queryRaw`SELECT PostGIS_version()`;
 
-      return zones.map(zone => new DeliveryZoneEntity(zone));
-    } catch (error) {
-      this.handleDatabaseError(error, 'Failed to fetch delivery zones');
+    const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
+      SELECT 
+        id,
+        title,
+        price,
+        min_order as "minOrder",
+        restaurant_id as "restaurantId",
+        created_at as "createdAt",
+        updated_at as "updatedAt",
+        ST_AsGeoJSON(ST_GeomFromText(polygon)) as polygon
+      FROM delivery_zones
+      WHERE restaurant_id = ${restaurantId}
+      ORDER BY created_at DESC
+    `;
+
+    return zones.map(zone => new DeliveryZoneEntity(zone));
+  } catch (error) {
+    if (error.message.includes('function st_geomfromtext')) {
+      throw new Error('PostGIS extension not properly installed or polygon data is malformed');
     }
+    this.handleDatabaseError(error, 'Failed to fetch delivery zones');
   }
+}
 
   async findOne(id: string): Promise<DeliveryZoneEntity> {
     try {

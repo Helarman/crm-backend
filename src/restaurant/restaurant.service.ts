@@ -48,14 +48,20 @@ import {
 	}
   
 	async update(restaurantId: string, dto: UpdateRestaurantDto) {
-	  await this.getById(restaurantId);
-	  return this.prisma.restaurant.update({
-		where: { id: restaurantId },
-		data: dto,
-		include: this.includeUsers
-	  });
-	}
-  
+		await this.getById(restaurantId);
+		
+		return this.prisma.restaurant.update({
+			where: { id: restaurantId },
+			data: {
+			...dto,
+			 users: undefined ,
+			id: undefined,
+			createdAt: undefined,
+			updatedAt: undefined,
+			}
+		});
+		}
+		
 	async delete(restaurantId: string) {
 	  await this.getById(restaurantId);
 	  return this.prisma.restaurant.delete({

@@ -409,6 +409,11 @@ export class OrderService {
             include: {
               category: true,
               additives: true,
+               ingredients: {
+                include: {
+                  inventoryItem: true // Добавляем связанный inventoryItem
+                }
+              },
               workshops: {
                 include: {
                   workshop: true 
@@ -447,6 +452,7 @@ export class OrderService {
       id: order.id,
       number: order.number,
       status: order.status,
+      
       source: order.source,
       type: order.type,
       createdAt: order.createdAt,
@@ -478,7 +484,8 @@ export class OrderService {
           title: item.product.title,
           price: item.price,
           image: item.product.images?.[0],
-          workshops: item.product.workshops
+          workshops: item.product.workshops,
+          ingredients: item.product.ingredients,
         },
         quantity: item.quantity,
         comment: item.comment,

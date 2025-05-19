@@ -1,15 +1,20 @@
-import { ArrayMinSize, IsNotEmpty, IsNumber, IsString } from 'class-validator'
+import { IsArray, IsOptional } from 'class-validator';
 
 export class UpdateRestaurantDto {
+  @IsOptional()
+  title?: string;
 
-	title?: string
+  @IsOptional()
+  address?: string;
 
-	address?: string
+  @IsOptional()
+  @IsArray()
+  images?: string[];
 
+  @IsOptional()
+  latitude?: string;
 
-	images?: string[]
+  @IsOptional()
+  longitude?: string;
 
-	latitude?: string
-
-	longitude?: string
 }

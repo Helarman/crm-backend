@@ -15,6 +15,7 @@ import { AdditiveModule } from './additive/additive.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { PaymentsModule } from './payment/payment.module';
 import { DeliveryZoneModule } from './delivery-zone/delivery-zone.module';
+import { WarehouseModule } from './warehouse/warehouse.module';
 
 @Module({
 	imports: [
@@ -31,7 +32,7 @@ import { DeliveryZoneModule } from './delivery-zone/delivery-zone.module';
 		PaymentsModule,
 		DeliveryZoneModule,
 		CustomerVerificationModule,
-		DiscountModule, MarkupModule
+		DiscountModule, MarkupModule, WarehouseModule,
 	]
 })
 export class AppModule {}

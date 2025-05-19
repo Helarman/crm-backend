@@ -89,23 +89,28 @@ export class ProductService {
   }
 
   async create(dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ...productData } = dto;
+    const { restaurantPrices, additives, categoryId, workshopIds,ingredients, ...productData } = dto;
     
     // Создаем продукт
     const product = await this.prisma.product.create({
-    data: {
-      ...productData,
-      description: productData.description || '',
-      ingredients: productData.ingredients || '',
-      category: categoryId ? { connect: { id: categoryId } } : undefined,
-      additives: additives ? { connect: additives.map(id => ({ id })) } : undefined,
-      workshops: workshopIds ? {
-        create: workshopIds.map(id => ({
-          workshop: { connect: { id } }
-        }))
-      } : undefined,
-    },
-  });
+        data: {
+          ...productData,
+          description: productData.description || '',
+          category: categoryId ? { connect: { id: categoryId } } : undefined,
+          additives: additives ? { connect: additives.map(id => ({ id })) } : undefined,
+          workshops: workshopIds ? {
+            create: workshopIds.map(id => ({
+              workshop: { connect: { id } }
+            }))
+          } : undefined,
+          ingredients: ingredients ? {
+            create: ingredients.map(ing => ({
+              quantity: ing.quantity,
+              inventoryItem: { connect: { id: ing.inventoryItemId } }
+            }))
+          } : undefined,
+        },
+      });
 
     // Создаем цены для ресторанов
     if (restaurantPrices?.length) {
@@ -122,26 +127,13 @@ export class ProductService {
     return this.getById(product.id);
   }
 
-  async update(id: string, dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ...productData } = dto;
+ async update(id: string, dto: ProductDto) {
+    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, ...productData } = dto;
     
-    // Сначала обновляем связи с цехами
-    if (workshopIds) {
-      // Удаляем все существующие связи
-      await this.prisma.productWorkshop.deleteMany({
-        where: { productId: id }
-      });
-
-      // Создаем новые связи
-      if (workshopIds.length > 0) {
-        await this.prisma.productWorkshop.createMany({
-          data: workshopIds.map(workshopId => ({
-            productId: id,
-            workshopId
-          }))
-        });
-      }
-    }
+    // Удаляем старые связи с ингредиентами
+    await this.prisma.productIngredient.deleteMany({
+      where: { productId: id }
+    });
 
     // Обновляем продукт
     await this.prisma.product.update({
@@ -149,12 +141,16 @@ export class ProductService {
       data: {
         ...productData,
         description: productData.description || '',
-        ingredients: productData.ingredients || '',
         category: categoryId ? { connect: { id: categoryId } } : undefined,
         additives: additives ? { set: additives.map(id => ({ id })) } : undefined,
+        ingredients: ingredients ? {
+          create: ingredients.map(ing => ({
+            quantity: ing.quantity,
+            inventoryItem: { connect: { id: ing.inventoryItemId } }
+          }))
+        } : undefined,
       },
     });
-
     // Обновляем цены в ресторанах
     if (restaurantPrices) {
       await this.prisma.restaurantProductPrice.deleteMany({
@@ -210,5 +206,27 @@ export class ProductService {
       price: price.price,
       isStopList: price.isStopList
     }));
+  }
+
+  async getIngredients(productId: string) {
+  const ingredients = await this.prisma.productIngredient.findMany({
+    where: { productId },
+    select: {
+      inventoryItemId: true,
+      quantity: true,
+      inventoryItem: {
+        select: {
+          name: true,
+          unit: true
+        }
+      }
+    }
+  });
+  return ingredients.map(i => ({
+    inventoryItemId: i.inventoryItemId,
+    quantity: i.quantity,
+    name: i.inventoryItem.name,
+    unit: i.inventoryItem.unit
+  }));
   }
 }

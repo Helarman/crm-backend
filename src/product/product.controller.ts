@@ -102,4 +102,12 @@ import {
 	async getRestaurantPrices(@Param('id') id: string) {
 		return this.productService.getRestaurantPrices(id);
 	}
+
+	@Get(':id/ingredients')
+	@ApiOperation({ summary: 'Получить ингредиенты продукта' })
+	@ApiParam({ name: 'id', description: 'ID продукта' })
+	@ApiOkResponse({ description: 'Ингредиенты найдены' })
+	async getIngredients(@Param('id') id: string) {
+	return this.productService.getIngredients(id);
+	}
 }

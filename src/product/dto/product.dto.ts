@@ -1,7 +1,6 @@
 export class ProductDto {
   title: string;
-  description: string; // Обязательное поле в схеме Prisma
-  ingredients: string; // Обязательное поле в схеме Prisma
+  description: string; 
   price: number;
   images: string[];
   categoryId?: string;
@@ -23,5 +22,9 @@ export class ProductDto {
     restaurantId: string;
     price: number;
     isStopList: boolean;
+  }[];
+   ingredients?: {
+    inventoryItemId: string;
+    quantity: number;
   }[];
 }
