@@ -22,6 +22,7 @@ export class ShiftService {
     return this.prisma.shift.create({
       data: {
         restaurantId: dto.restaurantId,
+        status: dto.status,
         startTime: dto.startTime,
         endTime: dto.endTime,
         description: dto.description,

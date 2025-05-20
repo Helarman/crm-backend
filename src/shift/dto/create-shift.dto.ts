@@ -20,4 +20,6 @@ export class CreateShiftDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  status: any
 }
