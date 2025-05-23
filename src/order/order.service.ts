@@ -7,6 +7,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
 import { AddItemToOrderDto } from './dto/add-item-to-order.dto';
+import { UpdateOrderItemDto } from './dto/update-order-item.dto';
 
 function timeStringToISODate(timeStr) {
   const [hours, minutes] = timeStr.split(':').map(Number);
@@ -361,6 +362,114 @@ export class OrderService {
       where: { id },
       data: { status: dto.status },
       include: this.getOrderInclude(),
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+  async updateOrderItem(
+    orderId: string,
+    itemId: string,
+    dto: UpdateOrderItemDto
+  ): Promise<OrderResponse> {
+    // 1. Находим заказ и проверяем его существование
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { additives: true }
+        },
+        payment: true 
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    const item = order.items[0];
+    if (!item) {
+      throw new NotFoundException('Позиция заказа не найдена');
+    }
+
+    // 2. Проверяем статус позиции - можно редактировать только возвращенные
+    if (item.status !== 'REFUNDED') {
+      throw new BadRequestException(
+        'Можно редактировать только возвращенные позиции'
+      );
+    }
+
+    // 3. Проверяем статус оплаты
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя редактировать позиции в оплаченном заказе');
+    }
+
+    // 4. Проверяем добавки, если они указаны
+    let additives: any[] = [];
+    if (dto.additiveIds?.length) {
+      additives = await this.prisma.additive.findMany({
+        where: { id: { in: dto.additiveIds } }
+      });
+
+      if (additives.length !== dto.additiveIds.length) {
+        const missingIds = dto.additiveIds.filter(id => 
+          !additives.some(a => a.id === id)
+        );
+        throw new NotFoundException(
+          `Не найдены добавки с ID: ${missingIds.join(', ')}`
+        );
+      }
+    }
+
+    // 5. Получаем текущую цену продукта
+    const productPrice = await this.prisma.restaurantProductPrice.findFirst({
+      where: {
+        productId: item.productId,
+        restaurantId: order.restaurantId,
+      },
+    });
+
+    if (!productPrice) {
+      throw new NotFoundException('Цена продукта не найдена');
+    }
+
+    // 6. Рассчитываем разницу в стоимости
+    const oldAdditivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const newAdditivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
+    
+    const oldItemPrice = (productPrice.price + oldAdditivesPrice) * item.quantity;
+    const newItemPrice = (productPrice.price + newAdditivesPrice) * item.quantity;
+    const priceDifference = newItemPrice - oldItemPrice;
+
+    // 7. Обновляем позицию в транзакции
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.update({
+        where: { id: itemId },
+        data: {
+          comment: dto.comment !== undefined ? dto.comment : item.comment,
+          additives: dto.additiveIds !== undefined 
+            ? { set: dto.additiveIds.map(id => ({ id })) }
+            : undefined,
+        },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { increment: priceDifference },
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { increment: priceDifference } },
+        });
+      }
+
+      return updated;
     });
 
     return this.mapToResponse(updatedOrder);

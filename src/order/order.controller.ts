@@ -8,6 +8,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
 import { AddItemToOrderDto } from './dto/add-item-to-order.dto';
+import { UpdateOrderItemDto } from './dto/update-order-item.dto';
 
 @ApiTags('Заказы')
 @Controller('orders')
@@ -104,5 +105,20 @@ export class OrderController {
     @Body() dto: AddItemToOrderDto
   ): Promise<OrderResponse> {
     return this.orderService.addItemToOrder(orderId, dto);
-}
+  }
+  
+  @Patch(':orderId/items/:itemId')
+  @ApiOperation({ summary: 'Обновить позицию в заказе' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Позиция обновлена', 
+    type: OrderResponse 
+  })
+  async updateOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateOrderItemDto
+  ): Promise<OrderResponse> {
+    return this.orderService.updateOrderItem(orderId, itemId, dto);
+  }
 }
