@@ -6,6 +6,7 @@ import { EnumOrderItemStatus, EnumOrderStatus, EnumPaymentStatus } from '@prisma
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
+import { AddItemToOrderDto } from './dto/add-item-to-order.dto';
 
 function timeStringToISODate(timeStr) {
   const [hours, minutes] = timeStr.split(':').map(Number);
@@ -185,6 +186,131 @@ export class OrderService {
     }, 0);
   }
 
+
+  async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
+    // 1. Находим заказ и проверяем его существование
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { restaurant: true, payment: true },
+    });
+
+    if (!order || !order.restaurant) {
+      throw new NotFoundException('Заказ или ресторан не найден');
+    }
+
+    // 2. Проверяем статус оплаты
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
+    }
+
+    // 3. Находим продукт с проверкой на null
+    const product = await this.prisma.product.findUnique({
+      where: { id: dto.productId },
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
+    }
+
+    // 4. Проверяем связь продукта с рестораном
+    const productInRestaurant = await this.prisma.product.count({
+      where: {
+        id: dto.productId,
+        restaurants: { some: { id: order.restaurant.id } }
+      }
+    });
+
+    if (!productInRestaurant) {
+      throw new BadRequestException(
+        `Продукт "${product.title}" не доступен в ресторане "${order.restaurant.title}"`
+      );
+    }
+
+    // 5. Получаем или создаем цену продукта
+    let productPrice = await this.prisma.restaurantProductPrice.findFirst({
+      where: {
+        productId: dto.productId,
+        restaurantId: order.restaurant.id,
+      },
+    });
+
+    // Если цена не найдена, создаем новую запись с базовой ценой
+    if (!productPrice) {
+      productPrice = await this.prisma.restaurantProductPrice.create({
+        data: {
+          productId: dto.productId,
+          restaurantId: order.restaurant.id,
+          price: product.price, // Используем базовую цену
+          isStopList: false
+        }
+      });
+    }
+
+    // 6. Проверяем стоп-лист
+    if (productPrice.isStopList) {
+      throw new BadRequestException(
+        `Продукт "${product.title}" в стоп-листе ресторана "${order.restaurant.title}"`
+      );
+    }
+
+    // 7. Проверяем добавки
+    const additives = dto.additiveIds?.length 
+      ? await this.prisma.additive.findMany({
+          where: { id: { in: dto.additiveIds } }
+        })
+      : [];
+
+    if (dto.additiveIds?.length && additives.length !== dto.additiveIds.length) {
+      const missingIds = dto.additiveIds.filter(id => 
+        !additives.some(a => a.id === id)
+      );
+      throw new NotFoundException(
+        `Не найдены добавки с ID: ${missingIds.join(', ')}`
+      );
+    }
+
+    // 8. Рассчитываем стоимость
+    const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
+    const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
+
+    // 9. Добавляем позицию в транзакции
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.create({
+        data: {
+          order: { connect: { id: orderId } },
+          product: { connect: { id: dto.productId } },
+          quantity: dto.quantity,
+          price: productPrice.price,
+          comment: dto.comment,
+          status: 'CREATED',
+          additives: dto.additiveIds?.length 
+            ? { connect: dto.additiveIds.map(id => ({ id })) }
+            : undefined,
+        },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { increment: itemPrice },
+          status: order.status === 'COMPLETED' ? 'CONFIRMED' : order.status,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { increment: itemPrice } },
+        });
+      }
+
+      return updated;
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
   async generateOrderNumber(restaurantId: string): Promise<string> {
     const dateStr = new Date()
       .toLocaleDateString('ru-RU', {
@@ -229,11 +355,7 @@ export class OrderService {
 
     if (!order) throw new NotFoundException('Заказ не найден');
 
-    if (!this.isValidStatusTransition(order.status, dto.status)) {
-      throw new BadRequestException(
-        `Недопустимый переход статуса из ${order.status} в ${dto.status}`
-      );
-    }
+   
 
     const updatedOrder = await this.prisma.order.update({
       where: { id },
@@ -255,12 +377,6 @@ export class OrderService {
     });
 
     if (!item) throw new NotFoundException('Элемент заказа не найден');
-
-    if (!this.isValidItemStatusTransition(item.status, dto.status)) {
-      throw new BadRequestException(
-        `Недопустимый переход статуса из ${item.status} в ${dto.status}`
-      );
-    }
 
     const updateData: any = { status: dto.status };
     if (dto.status === EnumOrderItemStatus.IN_PROGRESS && dto.userId) {
@@ -408,10 +524,16 @@ export class OrderService {
           product: {
             include: {
               category: true,
+              restaurantPrices: {
+                select: {
+                  price: true,
+                  isStopList: true
+                }
+              },
               additives: true,
                ingredients: {
                 include: {
-                  inventoryItem: true // Добавляем связанный inventoryItem
+                  inventoryItem: true 
                 }
               },
               workshops: {
@@ -486,6 +608,7 @@ export class OrderService {
           image: item.product.images?.[0],
           workshops: item.product.workshops,
           ingredients: item.product.ingredients,
+          restaurantPrices: item.product.restaurantPrices,
         },
         quantity: item.quantity,
         comment: item.comment,

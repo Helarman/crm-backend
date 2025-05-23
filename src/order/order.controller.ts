@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
+import { AddItemToOrderDto } from './dto/add-item-to-order.dto';
 
 @ApiTags('Заказы')
 @Controller('orders')
@@ -90,4 +91,18 @@ export class OrderController {
   ): Promise<OrderResponse> {
     return this.orderService.bulkUpdateOrderItemsStatus(orderId, dto);
   }
+
+  @Post(':orderId/items')
+  @ApiOperation({ summary: 'Добавить позицию в заказ' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Позиция добавлена в заказ', 
+    type: OrderResponse 
+  })
+  async addItemToOrder(
+    @Param('orderId') orderId: string,
+    @Body() dto: AddItemToOrderDto
+  ): Promise<OrderResponse> {
+    return this.orderService.addItemToOrder(orderId, dto);
+}
 }

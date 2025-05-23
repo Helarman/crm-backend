@@ -496,12 +496,13 @@ enum InventoryTransactionType {
 }
 
 enum EnumOrderItemStatus {
-  CREATED       // Создан
-  IN_PROGRESS   // В процессе приготовления
-  PARTIALLY_DONE // Частично готов
-  PAUSED        // На паузе
-  COMPLETED     // Готов
-  CANCELLED     // Отменен
+  REFUNDED
+  CREATED     
+  IN_PROGRESS  
+  PARTIALLY_DONE 
+  PAUSED       
+  COMPLETED     
+  CANCELLED     
 }
 
 enum OrderType {
