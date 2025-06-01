@@ -59,6 +59,14 @@ export class OrderResponse {
     notes?: string;
   };
   totalPrice: number;
-  totalAmount: number; // Добавлено
+  totalAmount: number; 
   totalItems: number;
+  surcharges?: {
+    id: string;
+    surchargeId: string;
+    title: string;
+    amount: number;
+    type: 'FIXED' | 'PERCENTAGE';
+    description?: string;
+  }[];
 }

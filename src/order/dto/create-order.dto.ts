@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EnumOrderType, EnumPaymentMethod } from '@prisma/client';
+import { EnumOrderType, EnumPaymentMethod, EnumSurchargeType } from '@prisma/client';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -21,6 +21,19 @@ export class PaymentDto {
 
   @ApiProperty({ required: false })
   externalId?: string;
+}
+export class OrderSurchargeDto {
+  @ApiProperty()
+  surchargeId: string;
+
+  @ApiProperty()
+  amount: number;
+
+  @ApiProperty({ enum: EnumSurchargeType })
+  type: EnumSurchargeType;
+
+  @ApiProperty({ required: false })
+  description?: string;
 }
 
 export class CreateOrderDto {
@@ -57,13 +70,21 @@ export class CreateOrderDto {
   @ApiProperty({ required: false })
   deliveryNotes?: string;
 
-  deliveryZone: {
-    title: string
-    price: number
-  }
-  tableNumber?: string
+  @ApiProperty({ type: Object, required: false })
+  deliveryZone?: {
+    title: string;
+    price: number;
+  };
 
-  numberOfPeople?: string
+  @ApiProperty({ required: false })
+  tableNumber?: string;
 
-  source: any
+  @ApiProperty({ required: false })
+  numberOfPeople?: string;
+
+  @ApiProperty()
+  source: any;
+
+  @ApiProperty({ type: [OrderSurchargeDto], required: false })
+  surcharges?: OrderSurchargeDto[];
 }

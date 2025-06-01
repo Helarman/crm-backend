@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards, Patch, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards, Patch, Req, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -120,5 +120,19 @@ export class OrderController {
     @Body() dto: UpdateOrderItemDto
   ): Promise<OrderResponse> {
     return this.orderService.updateOrderItem(orderId, itemId, dto);
+  }
+
+  @Delete(':orderId/items/:itemId')
+  @ApiOperation({ summary: 'Удалить позицию из заказа' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Позиция удалена из заказа', 
+    type: OrderResponse 
+  })
+  async removeItemFromOrder(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeItemFromOrder(orderId, itemId);
   }
 }

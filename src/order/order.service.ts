@@ -26,7 +26,7 @@ export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   
-  async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
+ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     // Валидация данных
     const { restaurant, products, additives, productPrices } = await this.validateOrderData(dto);
 
@@ -41,12 +41,16 @@ export class OrderService {
     // Генерация уникального номера заказа
     const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
-    let deliveryPrice = 0
-    if(dto.type === "DELIVERY" ){
-      deliveryPrice = dto.deliveryZone.price
+    let deliveryPrice = 0;
+    if(dto.type === "DELIVERY" && dto.deliveryZone) {
+      deliveryPrice = dto.deliveryZone.price;
     }
+
     // Расчет суммы
-    const totalAmount = this.calculateOrderTotal(dto.items, additives, productPrices) + deliveryPrice;
+    const baseAmount = this.calculateOrderTotal(dto.items, additives, productPrices);
+    const surchargesAmount = this.calculateSurchargesTotal(dto.surcharges || [], baseAmount + deliveryPrice);
+    const totalAmount = baseAmount + deliveryPrice + surchargesAmount;
+
     // Создание заказа в транзакции
     const order = await this.prisma.$transaction(async (prisma) => {
       const order = await prisma.order.create({
@@ -78,6 +82,13 @@ export class OrderService {
                 : undefined,
             })),
           },
+          surcharges: dto.surcharges?.length ? {
+            create: dto.surcharges.map(surcharge => ({
+              surcharge: { connect: { id: surcharge.surchargeId } },
+              amount: surcharge.amount,
+              description: surcharge.description,
+            })),
+          } : undefined,
         },
         include: this.getOrderInclude(),
       });
@@ -98,6 +109,19 @@ export class OrderService {
     });
 
     return this.mapToResponse(order);
+  }
+
+  private calculateSurchargesTotal(
+    surcharges: { amount: number; type: 'FIXED' | 'PERCENTAGE' }[],
+    baseAmount: number
+  ): number {
+    return surcharges.reduce((total, surcharge) => {
+      if (surcharge.type === 'FIXED') {
+        return total + surcharge.amount;
+      } else {
+        return total + (baseAmount * surcharge.amount) / 100;
+      }
+    }, 0);
   }
 
   private async validateOrderData(dto: CreateOrderDto) {
@@ -188,8 +212,64 @@ export class OrderService {
   }
 
 
+  async removeItemFromOrder(orderId: string, itemId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { 
+            additives: true,
+            product: true 
+          }
+        },
+        payment: true 
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    const item = order.items[0];
+    if (!item) {
+      throw new NotFoundException('Позиция заказа не найдена');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя удалить позицию из оплаченного заказа');
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.delete({
+        where: { id: itemId },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { decrement: itemTotalPrice },
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: itemTotalPrice } },
+        });
+      }
+
+      return updated;
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
   async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
-    // 1. Находим заказ и проверяем его существование
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { restaurant: true, payment: true },
@@ -199,12 +279,10 @@ export class OrderService {
       throw new NotFoundException('Заказ или ресторан не найден');
     }
 
-    // 2. Проверяем статус оплаты
     if (order.payment?.status === 'PAID') {
       throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
     }
 
-    // 3. Находим продукт с проверкой на null
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
     });
@@ -213,7 +291,6 @@ export class OrderService {
       throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
     }
 
-    // 4. Проверяем связь продукта с рестораном
     const productInRestaurant = await this.prisma.product.count({
       where: {
         id: dto.productId,
@@ -227,7 +304,6 @@ export class OrderService {
       );
     }
 
-    // 5. Получаем или создаем цену продукта
     let productPrice = await this.prisma.restaurantProductPrice.findFirst({
       where: {
         productId: dto.productId,
@@ -235,26 +311,23 @@ export class OrderService {
       },
     });
 
-    // Если цена не найдена, создаем новую запись с базовой ценой
     if (!productPrice) {
       productPrice = await this.prisma.restaurantProductPrice.create({
         data: {
           productId: dto.productId,
           restaurantId: order.restaurant.id,
-          price: product.price, // Используем базовую цену
+          price: product.price, 
           isStopList: false
         }
       });
     }
 
-    // 6. Проверяем стоп-лист
     if (productPrice.isStopList) {
       throw new BadRequestException(
         `Продукт "${product.title}" в стоп-листе ресторана "${order.restaurant.title}"`
       );
     }
 
-    // 7. Проверяем добавки
     const additives = dto.additiveIds?.length 
       ? await this.prisma.additive.findMany({
           where: { id: { in: dto.additiveIds } }
@@ -270,11 +343,9 @@ export class OrderService {
       );
     }
 
-    // 8. Рассчитываем стоимость
     const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
     const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
 
-    // 9. Добавляем позицию в транзакции
     const updatedOrder = await this.prisma.$transaction(async (prisma) => {
       await prisma.orderItem.create({
         data: {
@@ -665,8 +736,11 @@ export class OrderService {
       restaurant: true,
       shift: true,
       payment: true,
-      appliedDiscounts: true,
-      appliedMarkup: true,
+      surcharges: {
+        include: {
+          surcharge: true
+        }
+      }
     };
   }
 
@@ -710,6 +784,10 @@ export class OrderService {
       items: itemsWithTotals.map(item => ({
         id: item.id,
         status: item.status,
+        assignedTo: item.assignedTo ? {
+          id: item.assignedTo.id,
+          name: item.assignedTo.name,
+        } : null,
         product: {
           id: item.product.id,
           title: item.product.title,
@@ -739,6 +817,14 @@ export class OrderService {
         time: order.deliveryTime,
         notes: order.deliveryNotes,
       } : undefined,
+      surcharges: order.surcharges?.map(s => ({
+      id: s.id,
+      surchargeId: s.surchargeId,
+      title: s.surcharge?.title || s.description || 'Надбавка',
+      amount: s.amount,
+      type: s.surcharge?.type || 'FIXED',
+      description: s.description
+       })) || [],
     };
   }
 }
