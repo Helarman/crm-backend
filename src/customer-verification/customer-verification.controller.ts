@@ -1,12 +1,13 @@
-import { Body, Controller, Post, HttpCode, Param, Get } from '@nestjs/common';
+import { Body, Controller, Post, HttpCode, Param, Get, Query, Patch } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CustomerVerificationService } from './customer-verification.service';
 import { RequestCodeDto } from './dto/request-code.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 import { VerifyCodeResponseDto } from './dto/verify-code-response.dto';
-import { CustomerDto } from './dto/customer.dto'
+import { CustomerDto } from './dto/customer.dto';
+import { UpdateBonusPointsDto } from './dto/update-bonus-points.dto';
+import { IncrementBonusPointsDto } from './dto/increment-bonus-points.dto';
 
-// Группировка всех эндпоинтов верификации под одним тегом в Swagger
 @ApiTags('Верификация клиента')
 @Controller('customer-verification')
 export class CustomerVerificationController {
@@ -14,9 +15,43 @@ export class CustomerVerificationController {
     private readonly verificationService: CustomerVerificationService
   ) {}
 
-  // Эндпоинт для запроса SMS с кодом подтверждения
+  @Get('customers')
+  @ApiOperation({ 
+    summary: 'Получение списка клиентов', 
+    description: 'Возвращает список клиентов с пагинацией' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Список клиентов успешно получен',
+    schema: {
+      example: {
+        data: [
+          {
+            id: 'clxyz...',
+            phone: '79991234567',
+            bonusPoints: 100,
+            createdAt: '2023-01-01T00:00:00.000Z',
+            lastLogin: '2023-01-02T00:00:00.000Z'
+          }
+        ],
+        pagination: {
+          total: 100,
+          page: 1,
+          limit: 10,
+          totalPages: 10
+        }
+      }
+    }
+  })
+  async getAllCustomers(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10
+  ) {
+    return this.verificationService.getAllCustomers(page, limit);
+  }
+
   @Post('request-code')
-  @HttpCode(200) // Явно указываем код ответа 200 при успехе
+  @HttpCode(200)
   @ApiOperation({ 
     summary: 'Запрос кода подтверждения', 
     description: 'Отправляет SMS с кодом подтверждения на указанный номер телефона' 
@@ -26,28 +61,7 @@ export class CustomerVerificationController {
     description: 'Код подтверждения успешно отправлен',
     schema: {
       example: {
-        success: true,
-        message: 'Код подтверждения отправлен'
-      }
-    }
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Неверный формат номера телефона',
-    schema: {
-      example: {
-        success: false,
-        message: 'Неверный формат номера телефона'
-      }
-    }
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Слишком много попыток запроса кода',
-    schema: {
-      example: {
-        success: false,
-        message: 'Слишком много попыток. Попробуйте позже'
+        success: true
       }
     }
   })
@@ -55,7 +69,6 @@ export class CustomerVerificationController {
     return this.verificationService.requestCode(dto.phone);
   }
 
-  // Эндпоинт для проверки введенного кода подтверждения
   @Post('verify-code')
   @HttpCode(200)
   @ApiOperation({ 
@@ -65,33 +78,12 @@ export class CustomerVerificationController {
   @ApiResponse({ 
     status: 200, 
     description: 'Код успешно подтвержден',
-    type: VerifyCodeResponseDto // Используем типизированный DTO для ответа
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Неверный или просроченный код подтверждения',
-    schema: {
-      example: {
-        success: false,
-        message: 'Неверный или просроченный код'
-      }
-    }
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Номер телефона не найден или код не запрашивался',
-    schema: {
-      example: {
-        success: false,
-        message: 'Данные для верификации не найдены'
-      }
-    }
+    type: VerifyCodeResponseDto
   })
   async verifyCode(@Body() dto: VerifyCodeDto) {
     return this.verificationService.verifyCode(dto.phone, dto.code);
   }
 
-  // Эндпоинт для обновления JWT токенов
   @Post('refresh-token')
   @HttpCode(200)
   @ApiOperation({ 
@@ -108,20 +100,9 @@ export class CustomerVerificationController {
       }
     }
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Неверный или просроченный refresh token',
-    schema: {
-      example: {
-        success: false,
-        message: 'Неверный refresh token'
-      }
-    }
-  })
   async refreshToken(@Body('refreshToken') refreshToken: string) {
     return this.verificationService.refreshTokens(refreshToken);
   }
-
 
   @Get('customer/:phone')
   @ApiOperation({ 
@@ -133,17 +114,43 @@ export class CustomerVerificationController {
     description: 'Информация о клиенте успешно получена',
     type: CustomerDto
   })
-  @ApiResponse({
-    status: 404,
-    description: 'Клиент с указанным номером телефона не найден',
-    schema: {
-      example: {
-        success: false,
-        message: 'Клиент не найден'
-      }
-    }
-  })
   async getCustomerByPhone(@Param('phone') phone: string) {
     return this.verificationService.getCustomerByPhone(phone);
+  }
+
+  @Patch('customer/:id/bonus-points')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Обновление бонусных баллов', 
+    description: 'Устанавливает новое значение бонусных баллов' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Бонусные баллы успешно обновлены',
+    type: CustomerDto
+  })
+  async updateBonusPoints(
+    @Param('id') customerId: string,
+    @Body() dto: UpdateBonusPointsDto
+  ) {
+    return this.verificationService.updateBonusPoints(customerId, dto.bonusPoints);
+  }
+
+  @Patch('customer/:id/bonus-points/increment')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Изменение бонусных баллов', 
+    description: 'Добавляет или вычитает указанное количество бонусных баллов' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Бонусные баллы успешно изменены',
+    type: CustomerDto
+  })
+  async incrementBonusPoints(
+    @Param('id') customerId: string,
+    @Body() dto: IncrementBonusPointsDto
+  ) {
+    return this.verificationService.incrementBonusPoints(customerId, dto.points);
   }
 }

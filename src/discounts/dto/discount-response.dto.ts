@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Discount, DiscountTargetType, DiscountType, EnumOrderType as OrderType, DayOfWeek } from '@prisma/client';
+import { Discount, DiscountTargetType, DiscountType, EnumOrderType as OrderType, DayOfWeek, EnumOrderType } from '@prisma/client';
 
-export class DiscountResponseDto implements Discount {
+export class DiscountResponseDto {
   @ApiProperty()
   id: string;
 
@@ -14,8 +14,8 @@ export class DiscountResponseDto implements Discount {
   @ApiProperty()
   title: string;
 
-  @ApiProperty({ nullable: true })
-  description: string | null;
+  @ApiProperty()
+  description: string; // Убрали опциональность
 
   @ApiProperty({ enum: DiscountType })
   type: DiscountType;
@@ -26,30 +26,63 @@ export class DiscountResponseDto implements Discount {
   @ApiProperty({ enum: DiscountTargetType })
   targetType: DiscountTargetType;
 
-  @ApiProperty({ nullable: true })
-  minOrderAmount: number | null;
+  @ApiProperty({ required: false })
+  minOrderAmount?: number;
 
-  @ApiProperty({ enum: OrderType, isArray: true })
-  orderTypes: OrderType[];
+  @ApiProperty({ type: [String], enum: EnumOrderType })
+  orderTypes: EnumOrderType[];
 
-  @ApiProperty({ enum: DayOfWeek, isArray: true })
+  @ApiProperty({ type: [String], enum: DayOfWeek })
   daysOfWeek: DayOfWeek[];
 
   @ApiProperty()
   isActive: boolean;
 
-  @ApiProperty({ nullable: true })
-  code: string | null;
+  @ApiProperty({ required: false })
+  code?: string;
 
-  @ApiProperty({ nullable: true })
-  maxUses: number | null;
+  @ApiProperty({ required: false })
+  maxUses?: number;
 
   @ApiProperty()
   currentUses: number;
 
-  @ApiProperty({ nullable: true })
-  startDate: Date | null;
+  @ApiProperty({ required: false })
+  startDate?: Date;
 
-  @ApiProperty({ nullable: true })
-  endDate: Date | null;
+  @ApiProperty({ required: false })
+  endDate?: Date;
+
+  @ApiProperty({ type: () => [RestaurantDiscountDto], required: false })
+  restaurants?: RestaurantDiscountDto[];
+
+  @ApiProperty({ type: () => [CategoryDiscountDto], required: false })
+  categories?: CategoryDiscountDto[];
+
+  @ApiProperty({ type: () => [ProductDiscountDto], required: false })
+  products?: ProductDiscountDto[];
+}
+
+class RestaurantDiscountDto {
+  @ApiProperty()
+  restaurant: {
+    id: string;
+    title: string;
+  };
+}
+
+class CategoryDiscountDto {
+  @ApiProperty()
+  category: {
+    id: string;
+    title: string;
+  };
+}
+
+class ProductDiscountDto {
+  @ApiProperty()
+  product: {
+    id: string;
+    title: string;
+  };
 }

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, UnauthorizedException, NotFoundException} from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
@@ -13,6 +13,14 @@ export class CustomerVerificationService {
 
   private generateRandomCode(length: number = 6): string {
     return Math.floor(Math.pow(10, length-1) + Math.random() * 9 * Math.pow(10, length-1)).toString();
+  }
+
+  private normalizePhone(phone: string): string {
+    const normalized = phone.replace(/\D/g, '');
+    if (normalized.length < 10) {
+      throw new BadRequestException('Номер телефона должен содержать не менее 10 цифр');
+    }
+    return normalized;
   }
 
   private issueTokens(customerId: string) {
@@ -30,14 +38,15 @@ export class CustomerVerificationService {
   }
 
   async requestCode(phone: string) {
+    const normalizedPhone = this.normalizePhone(phone);
     const code = this.generateRandomCode();
     const expiresInMinutes = this.config.get<number>('CODE_EXPIRATION_MINUTES', 5);
     const codeExpires = new Date(Date.now() + expiresInMinutes * 60 * 1000);
 
     await this.prisma.customer.upsert({
-      where: { phone },
+      where: { phone: normalizedPhone },
       create: { 
-        phone, 
+        phone: normalizedPhone, 
         code, 
         codeExpires 
       },
@@ -47,13 +56,14 @@ export class CustomerVerificationService {
       },
     });
 
-    console.log(`Код для ${phone}: ${code}`);
+    console.log(`Код для ${normalizedPhone}: ${code}`);
     return { success: true };
   }
 
   async verifyCode(phone: string, code: string) {
+    const normalizedPhone = this.normalizePhone(phone);
     const customer = await this.prisma.customer.findUnique({
-      where: { phone },
+      where: { phone: normalizedPhone },
     });
 
     if (!customer || customer.code !== code) {
@@ -65,7 +75,7 @@ export class CustomerVerificationService {
     }
 
     await this.prisma.customer.update({
-      where: { phone },
+      where: { phone: normalizedPhone },
       data: { 
         code: null, 
         codeExpires: null,
@@ -80,7 +90,8 @@ export class CustomerVerificationService {
       tokens,
       customer: {
         id: customer.id,
-        phone: customer.phone
+        phone: customer.phone,
+        bonusPoints: customer.bonusPoints
       }
     };
   }
@@ -103,14 +114,15 @@ export class CustomerVerificationService {
   }
 
   async getCustomerByPhone(phone: string) {
+    const normalizedPhone = this.normalizePhone(phone);
     const customer = await this.prisma.customer.findUnique({
-      where: { phone },
+      where: { phone: normalizedPhone },
       select: {
         id: true,
         phone: true,
+        bonusPoints: true,
         createdAt: true,
         lastLogin: true,
-        // другие поля, которые вы хотите возвращать
       }
     });
 
@@ -119,5 +131,81 @@ export class CustomerVerificationService {
     }
 
     return customer;
+  }
+
+  async getAllCustomers(page: number = 1, limit: number = 10) {
+    const skip = (page - 1) * limit;
+    const maxLimit = 100;
+    const take = Math.min(limit, maxLimit);
+    
+    const [customers, totalCount] = await Promise.all([
+      this.prisma.customer.findMany({
+        skip,
+        take,
+        select: {
+          id: true,
+          phone: true,
+          bonusPoints: true,
+          createdAt: true,
+          lastLogin: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.customer.count(),
+    ]);
+
+    return {
+      data: customers,
+      pagination: {
+        total: totalCount,
+        page,
+        limit: take,
+        totalPages: Math.ceil(totalCount / take),
+      },
+    };
+  }
+
+  async updateBonusPoints(customerId: string, bonusPoints: number) {
+    if (isNaN(bonusPoints)) {
+      throw new BadRequestException('Бонусные баллы должны быть числом');
+    }
+    
+    if (bonusPoints < 0) {
+      throw new BadRequestException('Бонусные баллы не могут быть отрицательными');
+    }
+
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: { bonusPoints },
+      select: {
+        id: true,
+        phone: true,
+        bonusPoints: true,
+        createdAt: true,
+        lastLogin: true
+      }
+    });
+  }
+
+  async incrementBonusPoints(customerId: string, pointsToAdd: number) {
+    if (isNaN(pointsToAdd)) {
+      throw new BadRequestException('Количество баллов должно быть числом');
+    }
+
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: { 
+        bonusPoints: { increment: pointsToAdd } 
+      },
+      select: {
+        id: true,
+        phone: true,
+        bonusPoints: true,
+        createdAt: true,
+        lastLogin: true
+      }
+    });
   }
 }

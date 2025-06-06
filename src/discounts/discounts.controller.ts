@@ -7,6 +7,7 @@ import {
   Put,
   Delete,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DiscountsService } from './discounts.service';
@@ -80,6 +81,128 @@ export class DiscountsController {
   @ApiResponse({ status: 404, description: 'Discount not found' })
   findByCode(@Param('code') code: string) {
     return this.discountsService.findDiscountByCode(code);
+  }
+
+   @Get('active')
+  @ApiOperation({ summary: 'Get all active discounts' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of active discounts', 
+    type: [DiscountResponseDto] 
+  })
+  findActive() {
+    return this.discountsService.findActiveDiscounts();
+  }
+
+  @Get('restaurant/:restaurantId')
+  @ApiOperation({ summary: 'Get discounts by restaurant' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of discounts for restaurant',
+    type: [DiscountResponseDto] 
+  })
+  findByRestaurant(@Param('restaurantId') restaurantId: string) {
+    return this.discountsService.findDiscountsByRestaurant(restaurantId);
+  }
+
+  @Post('for-products')
+  @ApiOperation({ summary: 'Get discounts for specific products' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of applicable discounts',
+    type: [DiscountResponseDto] 
+  })
+  findForProducts(@Body() body: { productIds: string[] }) {
+    return this.discountsService.findDiscountsForProducts(body.productIds);
+  }
+
+  @Post('for-categories')
+  @ApiOperation({ summary: 'Get discounts for specific categories' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of applicable discounts',
+    type: [DiscountResponseDto] 
+  })
+  findForCategories(@Body() body: { categoryIds: string[] }) {
+    return this.discountsService.findDiscountsForCategories(body.categoryIds);
+  }
+
+  @Get(':id/check-min-amount')
+  @ApiOperation({ summary: 'Check if order amount meets discount minimum' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Validation result',
+    schema: { type: 'object', properties: { isValid: { type: 'boolean' } } }
+  })
+  async checkMinAmount(
+    @Param('id') discountId: string,
+    @Query('amount') amount: number
+  ) {
+    const isValid = await this.discountsService.checkMinOrderAmount(discountId, amount);
+    return { isValid };
+  }
+
+  @Post(':id/generate-code')
+  @ApiOperation({ summary: 'Generate promo code for customer' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Generated promo code',
+    schema: { type: 'object', properties: { code: { type: 'string' } } }
+  })
+  async generatePromoCode(
+    @Param('id') discountId: string,
+    @Body() body: { customerId: string }
+  ) {
+    const code = await this.discountsService.generatePromoCode(discountId, body.customerId);
+    return { code };
+  }
+
+  @Get('customer/:customerId/promocodes')
+  @ApiOperation({ summary: 'Get customer promo codes' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of customer promo codes',
+    type: [DiscountResponseDto] 
+  })
+  getCustomerPromoCodes(@Param('customerId') customerId: string) {
+    return this.discountsService.getCustomerPromoCodes(customerId);
+  }
+
+  @Get('for-order-type/:orderType')
+  @ApiOperation({ summary: 'Get discounts for specific order type' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of applicable discounts for order type',
+    type: [DiscountResponseDto] 
+  })
+  findForOrderType(
+    @Param('orderType') orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
+    @Query('restaurantId') restaurantId?: string
+  ) {
+    return this.discountsService.findDiscountsForOrderType(orderType, restaurantId);
+  }
+
+  @Post('for-current-order')
+  @ApiOperation({ summary: 'Get discounts applicable to current order' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of applicable discounts for current order',
+    type: [DiscountResponseDto] 
+  })
+  findForCurrentOrder(
+    @Body() body: {
+      orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
+      productIds: string[],
+      categoryIds: string[],
+      restaurantId?: string
+    }
+  ) {
+    return this.discountsService.findDiscountsForCurrentOrder(
+      body.orderType,
+      body.productIds,
+      body.categoryIds,
+      body.restaurantId
+    );
   }
 
 }
