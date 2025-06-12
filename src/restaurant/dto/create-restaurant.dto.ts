@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsNotEmpty, IsString } from 'class-validator';
+import { ArrayMinSize, IsNotEmpty, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRestaurantDto {
@@ -11,6 +11,12 @@ export class CreateRestaurantDto {
   @IsString({ message: 'Название обязательно' })
   @IsNotEmpty({ message: 'Название не может быть пустым' })
   title: string;
+
+  @ApiProperty({
+    type: String,
+    example: 'Описание ресторана'
+  })
+  description: string;
 
   @ApiProperty({
     type: String,
@@ -60,4 +66,9 @@ export class CreateRestaurantDto {
   @IsString({ message: 'Координаты обязательны' })
   @IsNotEmpty({ message: 'Долгота не может быть пустой' })
   longitude: string;
+  
+  @ApiProperty()
+  @IsNotEmpty()
+  networkId: string;
+  
 }

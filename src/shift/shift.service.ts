@@ -197,4 +197,70 @@ export class ShiftService {
         totalPages: Math.ceil(total / limit),
     };
   }
+
+    async addExpenseToShift(shiftId: string, dto: { title: string; amount: number; description?: string }) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    return this.prisma.shiftExpense.create({
+      data: {
+        shiftId,
+        title: dto.title,
+        amount: dto.amount,
+        description: dto.description,
+      },
+    });
+  }
+
+  async getShiftExpenses(shiftId: string) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    return this.prisma.shiftExpense.findMany({
+      where: { shiftId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async removeExpense(expenseId: string) {
+    const expense = await this.prisma.shiftExpense.findUnique({
+      where: { id: expenseId },
+    });
+
+    if (!expense) {
+      throw new NotFoundException('Расход не найден');
+    }
+
+    return this.prisma.shiftExpense.delete({
+      where: { id: expenseId },
+    });
+  }
+  async updateExpense(expenseId: string, dto: { title?: string; amount?: number; description?: string }) {
+    const expense = await this.prisma.shiftExpense.findUnique({
+      where: { id: expenseId },
+    });
+
+    if (!expense) {
+      throw new NotFoundException('Расход не найден');
+    }
+
+    return this.prisma.shiftExpense.update({
+      where: { id: expenseId },
+      data: {
+        title: dto.title,
+        amount: dto.amount,
+        description: dto.description,
+      },
+    });
+  }
 }

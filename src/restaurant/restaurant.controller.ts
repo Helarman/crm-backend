@@ -26,7 +26,7 @@ import {
   } from '@nestjs/swagger';
   import { Auth } from '../auth/decorators/auth.decorator';
   import { AddUserDto } from './dto/add-user.dto';
-  import { AddProductDto } from './dto/add-product.dto'; // Добавлен импорт DTO
+  import { AddProductDto } from './dto/add-product.dto';
   import { CreateRestaurantDto } from './dto/create-restaurant.dto';
   import { RestaurantService } from './restaurant.service';
   

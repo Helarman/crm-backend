@@ -17,4 +17,11 @@ export class UpdateRestaurantDto {
   @IsOptional()
   longitude?: string;
 
+   @IsOptional()
+  networkId?: string;
+
+  @IsOptional()
+  description?: string;
+
+
 }

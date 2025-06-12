@@ -16,6 +16,8 @@ import { DeliveryZoneModule } from './delivery-zone/delivery-zone.module';
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { SurchargeModule } from './surcharge/surcharge.module';
 import { DiscountsModule } from './discounts/discounts.module';
+import { NetworkModule } from './network/network.module';
+import { TenantModule } from './tenant/tenant.module';
 
 @Module({
 	imports: [
@@ -34,7 +36,9 @@ import { DiscountsModule } from './discounts/discounts.module';
 		CustomerVerificationModule,
 		WarehouseModule,
 		SurchargeModule,
-		DiscountsModule
+		DiscountsModule,
+		NetworkModule,
+		TenantModule
 	]
 })
 export class AppModule {}

@@ -25,6 +25,7 @@ import {
   import { ManageShiftUserDto } from './dto/manage-shift-user.dto';
   import { ManageShiftOrderDto } from './dto/manage-shift-order.dto';
 import { GetShiftsDto } from './dto/get-shifts.dto';
+import { CreateShiftExpenseDto, UpdateShiftExpenseDto } from './dto/shift-expense.dto';
   
   
   @ApiTags('Смены')
@@ -115,4 +116,52 @@ import { GetShiftsDto } from './dto/get-shifts.dto';
     async getActiveShiftsByRestaurant(@Param('restaurantId') restaurantId: string) {
       return this.shiftService.getActiveShiftsByRestaurant(restaurantId);
     }
+
+    @Post(':id/expenses')
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Добавить расход к смене' })
+  @ApiParam({ name: 'id', description: 'ID смены' })
+  @ApiBody({ type: CreateShiftExpenseDto })
+  @ApiResponse({ status: 201, description: 'Расход добавлен' })
+  @ApiResponse({ status: 404, description: 'Смена не найдена' })
+  async addExpense(
+    @Param('id') shiftId: string,
+    @Body() dto: CreateShiftExpenseDto,
+  ) {
+    return this.shiftService.addExpenseToShift(shiftId, dto);
   }
+
+  @Get(':id/expenses')
+  @ApiOperation({ summary: 'Получить расходы смены' })
+  @ApiParam({ name: 'id', description: 'ID смены' })
+  @ApiResponse({ status: 200, description: 'Список расходов' })
+  @ApiResponse({ status: 404, description: 'Смена не найдена' })
+  async getExpenses(@Param('id') shiftId: string) {
+    return this.shiftService.getShiftExpenses(shiftId);
+  }
+
+  @Delete('expenses/:expenseId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Удалить расход' })
+  @ApiParam({ name: 'expenseId', description: 'ID расхода' })
+  @ApiResponse({ status: 200, description: 'Расход удален' })
+  @ApiResponse({ status: 404, description: 'Расход не найден' })
+  async removeExpense(@Param('expenseId') expenseId: string) {
+    return this.shiftService.removeExpense(expenseId);
+  }
+
+  @Put('expenses/:expenseId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Обновить расход' })
+  @ApiParam({ name: 'expenseId', description: 'ID расхода' })
+  @ApiBody({ type: UpdateShiftExpenseDto })
+  @ApiResponse({ status: 200, description: 'Расход обновлен' })
+  @ApiResponse({ status: 404, description: 'Расход не найден' })
+  async updateExpense(
+    @Param('expenseId') expenseId: string,
+    @Body() dto: UpdateShiftExpenseDto,
+  ) {
+    return this.shiftService.updateExpense(expenseId, dto);
+  }
+
+ }

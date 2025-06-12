@@ -46,8 +46,6 @@ export class DeliveryZoneService {
   await this.validateRestaurantExists(restaurantId);
 
   try {
-    // Сначала проверяем доступность PostGIS функций
-    await this.prisma.$queryRaw`SELECT PostGIS_version()`;
 
     const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
       SELECT 

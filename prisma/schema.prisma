@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://crm:Lwrl1GlK9U0OdKIGFuQ13ZCWBczocRZg@dpg-d0fs2rk9c44c73bk7q40-a.frankfurt-postgres.render.com/crm_zbvm"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -26,7 +26,7 @@ model User {
   assignedItems OrderItem[] @relation("OrderItemToUser") 
   workshops UserWorkshop[] 
   transactions InventoryTransaction[]
-
+  networks Network[]
   @@map("user")
 }
 model Workshop {
@@ -85,6 +85,8 @@ model Restaurant {
   warehouses Warehouse[]
   surcharges RestaurantSurcharge[]
   discounts   RestaurantDiscount[] 
+  network     Network  @relation(fields: [networkId], references: [id])
+  networkId   String   @map("network_id")
 
   @@map("restaurant")
 }
@@ -194,7 +196,23 @@ model Shift {
   endTime     DateTime?   @map("end_time")
   description String?
   orders      Order[]     @relation("OrderToShift")
+   expenses    ShiftExpense[]
   @@map("shifts")
+}
+
+model ShiftExpense {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  shift       Shift    @relation(fields: [shiftId], references: [id])
+  shiftId     String   @map("shift_id")
+
+  title       String   // Название расхода
+  amount      Float    // Сумма расхода
+  description String?  // Описание (необязательное)
+
+  @@map("shift_expenses")
 }
 
 model UserShift {
@@ -601,9 +619,62 @@ model PromoCode {
   @@unique([code, customerId])
 }
 
+model Tenant {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  name        String
+  type        TenantType  @default(API)
+  domain      String?     
+  subdomain   String?     @unique
+  isActive    Boolean     @default(true)
+  
+  logo        String?
+  primaryColor String    @default("#4f46e5")
+  secondaryColor String @default("#1e293b")
+  accentColor String    @default("#f43f5e")
+  
+  settings    Json?
+
+  network     Network?  
+  
+  @@map("tenants")
+}
+
+model Network {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  name        String
+  description String?
+  
+  owner       User        @relation(fields: [ownerId], references: [id])
+  ownerId     String      @map("owner_id")
+  
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id])
+  tenantId    String?     @unique @map("tenant_id")
+
+  restaurants Restaurant[]
+  
+  logo        String?
+  primaryColor String    @default("#4f46e5")
+  
+  @@map("networks")
+}
+
+
 enum EnumSurchargeType {
   FIXED   
   PERCENTAGE 
+}
+
+enum TenantType {
+  API
+  MARKETPLACE
+  ECOMMERCE
+  POS
 }
 
 enum InventoryTransactionType {

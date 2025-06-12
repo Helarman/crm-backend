@@ -23,44 +23,87 @@ import {
 		products: true,
 	};
 	
-	
+	private includeDetails = {
+		users: true,
+		products: true,
+		network: {
+		include: {
+			owner: true,
+			tenant: true
+		}
+		}
+	};
+
 	async getAll() {
 	  return this.prisma.restaurant.findMany({
-		include: this.includeUsers
+		 include: this.includeDetails
 	  });
 	}
   
 	async getById(restaurantId: string) {
 	  const restaurant = await this.prisma.restaurant.findUnique({
 		where: { id: restaurantId },
-		include: this.includeUsers
+		 include: this.includeDetails
 	  });
   
 	  if (!restaurant) throw new NotFoundException('Ресторан не найден');
 	  return restaurant;
-	}
+	}														
   
 	async create(dto: CreateRestaurantDto) {
-	  return this.prisma.restaurant.create({
-		data: dto,
-		include: this.includeUsers
-	  });
+
+		const network = await this.prisma.network.findUnique({
+			where: { id: dto.networkId }
+		});
+
+		if (!network) {
+			throw new NotFoundException('Сеть ресторанов не найдена');
+		}
+
+		 const data: Prisma.RestaurantCreateInput = {
+      title: dto.title,
+      description: dto.description,
+      address: dto.address,
+      images: dto.images || [],
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      network: {
+        connect: { id: dto.networkId }
+      }
+    };
+
+
+		return this.prisma.restaurant.create({ 
+			data,
+      	include: this.includeDetails
+		});
 	}
   
 	async update(restaurantId: string, dto: UpdateRestaurantDto) {
 		await this.getById(restaurantId);
 		
-		return this.prisma.restaurant.update({
-			where: { id: restaurantId },
-			data: {
-			...dto,
-			 users: undefined ,
+		 const data: Prisma.RestaurantUpdateInput = {
+			title: dto.title,
+			description: dto.description,
+			address: dto.address,
+			images: dto.images,
+			latitude: dto.latitude,
+			users: undefined ,
 			id: undefined,
 			createdAt: undefined,
 			updatedAt: undefined,
-			}
+			longitude: dto.longitude,
+			...(dto.networkId && {
+				network: { connect: { id: dto.networkId } }
+			})
+		};
+
+		return this.prisma.restaurant.update({
+			where: { id: restaurantId },
+			data,
+			include: this.includeDetails
 		});
-		}
+	}
 		
 	async delete(restaurantId: string) {
 	  await this.getById(restaurantId);
