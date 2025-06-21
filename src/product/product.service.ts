@@ -184,6 +184,11 @@ export class ProductService {
       where: { productId: id },
     });
 
+    // Add this to delete related ingredients
+    await this.prisma.productIngredient.deleteMany({
+      where: { productId: id }
+    });
+
     // Удаляем сам продукт
     return this.prisma.product.delete({
       where: { id },

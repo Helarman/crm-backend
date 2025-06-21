@@ -18,6 +18,7 @@ import { SurchargeModule } from './surcharge/surcharge.module';
 import { DiscountsModule } from './discounts/discounts.module';
 import { NetworkModule } from './network/network.module';
 import { TenantModule } from './tenant/tenant.module';
+import { OrderLogModule } from './order-log/order-log.module';
 
 @Module({
 	imports: [
@@ -38,7 +39,8 @@ import { TenantModule } from './tenant/tenant.module';
 		SurchargeModule,
 		DiscountsModule,
 		NetworkModule,
-		TenantModule
+		TenantModule,
+		OrderLogModule
 	]
 })
 export class AppModule {}

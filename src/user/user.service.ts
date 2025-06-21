@@ -23,8 +23,16 @@ export class UserService {
   async getAll(): Promise<PrismaUser[]> {
     return this.prisma.user.findMany({
       include: {
-        restaurant: true, 
-        workshops: true
+        restaurant: true,
+        workshops: {
+          include: {
+            workshop: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
       }
     });
   }

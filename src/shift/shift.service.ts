@@ -5,6 +5,7 @@ import { UpdateShiftStatusDto } from './dto/update-shift-status.dto';
 import { ManageShiftUserDto } from './dto/manage-shift-user.dto';
 import { ManageShiftOrderDto } from './dto/manage-shift-order.dto';
 import { GetShiftsDto } from './dto/get-shifts.dto';
+import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.dto';
 
 @Injectable()
 export class ShiftService {
@@ -143,9 +144,14 @@ export class ShiftService {
         users: {
           include: {
             user: true,
+            
           },
         },
-        orders: true
+        orders: {
+          include: {
+            payment: true, 
+          },
+        }
       },
     });
 
@@ -263,4 +269,71 @@ export class ShiftService {
       },
     });
   }
+  async addIncomeToShift(shiftId: string, dto: CreateShiftIncomeDto) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    return this.prisma.shiftIncome.create({
+      data: {
+        shiftId,
+        title: dto.title,
+        amount: dto.amount,
+        description: dto.description,
+      },
+    });
+  }
+
+  async getShiftIncomes(shiftId: string) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    return this.prisma.shiftIncome.findMany({
+      where: { shiftId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async removeIncome(incomeId: string) {
+    const income = await this.prisma.shiftIncome.findUnique({
+      where: { id: incomeId },
+    });
+
+    if (!income) {
+      throw new NotFoundException('Доход не найден');
+    }
+
+    return this.prisma.shiftIncome.delete({
+      where: { id: incomeId },
+    });
+  }
+
+  async updateIncome(incomeId: string, dto: UpdateShiftIncomeDto) {
+    const income = await this.prisma.shiftIncome.findUnique({
+      where: { id: incomeId },
+    });
+
+    if (!income) {
+      throw new NotFoundException('Доход не найден');
+    }
+
+    return this.prisma.shiftIncome.update({
+      where: { id: incomeId },
+      data: {
+        title: dto.title,
+        amount: dto.amount,
+        description: dto.description,
+      },
+    });
+  }
+
 }

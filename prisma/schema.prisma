@@ -27,6 +27,8 @@ model User {
   workshops UserWorkshop[] 
   transactions InventoryTransaction[]
   networks Network[]
+  logs OrderLog[]
+  
   @@map("user")
 }
 model Workshop {
@@ -196,7 +198,9 @@ model Shift {
   endTime     DateTime?   @map("end_time")
   description String?
   orders      Order[]     @relation("OrderToShift")
-   expenses    ShiftExpense[]
+  expenses    ShiftExpense[]
+  incomes     ShiftIncome[]
+
   @@map("shifts")
 }
 
@@ -213,6 +217,21 @@ model ShiftExpense {
   description String?  // Описание (необязательное)
 
   @@map("shift_expenses")
+}
+
+model ShiftIncome {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  shift       Shift    @relation(fields: [shiftId], references: [id])
+  shiftId     String   @map("shift_id")
+
+  title       String   // Название дохода
+  amount      Float    // Сумма дохода
+  description String?  // Описание (необязательное)
+
+  @@map("shift_incomes")
 }
 
 model UserShift {
@@ -282,7 +301,32 @@ model Order {
   bonusPointsUsed   Float       @default(0) @map("bonus_points_used") 
   bonusPointsEarned Float       @default(0) @map("bonus_points_earned") 
 
+   // Флаги внимания
+  isReordered    Boolean @default(false) @map("is_reordered")       // Дозаказ
+  hasDiscount    Boolean @default(false) @map("has_discount")       // Применена скидка
+  discountCanceled Boolean @default(false) @map("discount_canceled") // Отменена скидка
+  isPrecheck     Boolean @default(false) @map("is_precheck")        // Пречек
+  isRefund       Boolean @default(false) @map("is_refund")          // Возврат
+  logs OrderLog[]
+
   @@map("orders")
+}
+
+model OrderLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  order     Order    @relation(fields: [orderId], references: [id])
+  orderId   String   @map("order_id")
+  
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?  @map("user_id")
+  
+  action    String
+  message   String
+  metadata  Json?
+  
+  @@map("order_logs")
 }
 
 model OrderItem {
@@ -304,12 +348,17 @@ model OrderItem {
   startedAt   DateTime?           @map("started_at")
   completedAt DateTime?           @map("completed_at")
   pausedAt    DateTime?           @map("paused_at") 
+   refundedAt  DateTime?           @map("refunded_at")
   
   assignedTo  User?         @relation(fields: [assignedToId], references: [id], name: "OrderItemToUser")
   assignedToId String?      @map("assigned_to_id")
   
   additives   Additive[]    @relation("OrderItemAdditives")
   
+  isReordered    Boolean  @default(false) @map("is_reordered")
+  isRefund       Boolean  @default(false) @map("is_refund")
+  refundReason   String?  @map("refund_reason")
+
   @@map("order_items")
 }
 
@@ -425,7 +474,7 @@ model InventoryItem {
   product     Product?    @relation(fields: [productId], references: [id])
   productId   String?     @map("product_id")
   
-  name        String      
+  name        String      @unique
   description String?
   unit        String      
   quantity    Float       @default(0)

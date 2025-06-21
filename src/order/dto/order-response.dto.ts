@@ -69,4 +69,11 @@ export class OrderResponse {
     type: 'FIXED' | 'PERCENTAGE';
     description?: string;
   }[];
+  attentionFlags: {
+    isReordered: boolean;
+    hasDiscount: boolean;
+    discountCanceled: boolean;
+    isPrecheck: boolean;
+    isRefund: boolean;
+  }
 }

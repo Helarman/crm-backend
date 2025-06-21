@@ -26,6 +26,7 @@ import {
   import { ManageShiftOrderDto } from './dto/manage-shift-order.dto';
 import { GetShiftsDto } from './dto/get-shifts.dto';
 import { CreateShiftExpenseDto, UpdateShiftExpenseDto } from './dto/shift-expense.dto';
+import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.dto';
   
   
   @ApiTags('Смены')
@@ -162,6 +163,53 @@ import { CreateShiftExpenseDto, UpdateShiftExpenseDto } from './dto/shift-expens
     @Body() dto: UpdateShiftExpenseDto,
   ) {
     return this.shiftService.updateExpense(expenseId, dto);
+  }
+
+  @Post(':id/incomes')
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Добавить доход к смене' })
+  @ApiParam({ name: 'id', description: 'ID смены' })
+  @ApiBody({ type: CreateShiftIncomeDto })
+  @ApiResponse({ status: 201, description: 'Доход добавлен' })
+  @ApiResponse({ status: 404, description: 'Смена не найдена' })
+  async addIncome(
+    @Param('id') shiftId: string,
+    @Body() dto: CreateShiftIncomeDto,
+  ) {
+    return this.shiftService.addIncomeToShift(shiftId, dto);
+  }
+
+  @Get(':id/incomes')
+  @ApiOperation({ summary: 'Получить доходы смены' })
+  @ApiParam({ name: 'id', description: 'ID смены' })
+  @ApiResponse({ status: 200, description: 'Список доходов' })
+  @ApiResponse({ status: 404, description: 'Смена не найдена' })
+  async getIncomes(@Param('id') shiftId: string) {
+    return this.shiftService.getShiftIncomes(shiftId);
+  }
+
+  @Delete('incomes/:incomeId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Удалить доход' })
+  @ApiParam({ name: 'incomeId', description: 'ID дохода' })
+  @ApiResponse({ status: 200, description: 'Доход удален' })
+  @ApiResponse({ status: 404, description: 'Доход не найден' })
+  async removeIncome(@Param('incomeId') incomeId: string) {
+    return this.shiftService.removeIncome(incomeId);
+  }
+
+  @Put('incomes/:incomeId')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Обновить доход' })
+  @ApiParam({ name: 'incomeId', description: 'ID дохода' })
+  @ApiBody({ type: UpdateShiftIncomeDto })
+  @ApiResponse({ status: 200, description: 'Доход обновлен' })
+  @ApiResponse({ status: 404, description: 'Доход не найден' })
+  async updateIncome(
+    @Param('incomeId') incomeId: string,
+    @Body() dto: UpdateShiftIncomeDto,
+  ) {
+    return this.shiftService.updateIncome(incomeId, dto);
   }
 
  }

@@ -8,29 +8,24 @@ import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
 import { AddItemToOrderDto } from './dto/add-item-to-order.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
+import { UpdateAttentionFlagsDto } from './dto/update-attention-flags.dto';
+import { PaginatedResponse } from './dto/paginated-response.dto';
 
-function timeStringToISODate(timeStr) {
+function timeStringToISODate(timeStr: string): string {
   const [hours, minutes] = timeStr.split(':').map(Number);
-  
   const date = new Date();
-
-  date.setHours(hours, minutes, 0, 0); 
-  
-  const fullISO = new Date(date.toISOString().slice(0, 16) + ":00Z").toISOString();
-  return fullISO
+  date.setHours(hours, minutes, 0, 0);
+  return date.toISOString();
 }
-
 
 @Injectable()
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
-  
- async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
-    // Валидация данных
+  async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     const { restaurant, products, additives, productPrices } = await this.validateOrderData(dto);
 
-    // Проверка стоп-листа
     const stopListProducts = this.checkStopList(products, productPrices);
     if (stopListProducts.length > 0) {
       throw new BadRequestException(
@@ -38,20 +33,17 @@ export class OrderService {
       );
     }
 
-    // Генерация уникального номера заказа
     const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
     let deliveryPrice = 0;
-    if(dto.type === "DELIVERY" && dto.deliveryZone) {
+    if (dto.type === "DELIVERY" && dto.deliveryZone) {
       deliveryPrice = dto.deliveryZone.price;
     }
 
-    // Расчет суммы
     const baseAmount = this.calculateOrderTotal(dto.items, additives, productPrices);
     const surchargesAmount = this.calculateSurchargesTotal(dto.surcharges || [], baseAmount + deliveryPrice);
     const totalAmount = baseAmount + deliveryPrice + surchargesAmount;
 
-    // Создание заказа в транзакции
     const order = await this.prisma.$transaction(async (prisma) => {
       const order = await prisma.order.create({
         data: {
@@ -68,7 +60,7 @@ export class OrderService {
           comment: dto.comment,
           tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
           deliveryAddress: dto.deliveryAddress,
-          deliveryTime: dto.deliveryTime ? timeStringToISODate(dto.deliveryTime) : undefined,
+          deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
           deliveryNotes: dto.deliveryNotes,
           items: {
             create: dto.items.map(item => ({
@@ -111,168 +103,233 @@ export class OrderService {
     return this.mapToResponse(order);
   }
 
-  private calculateSurchargesTotal(
-    surcharges: { amount: number; type: 'FIXED' | 'PERCENTAGE' }[],
-    baseAmount: number
-  ): number {
-    return surcharges.reduce((total, surcharge) => {
-      if (surcharge.type === 'FIXED') {
-        return total + surcharge.amount;
-      } else {
-        return total + (baseAmount * surcharge.amount) / 100;
-      }
-    }, 0);
+  async findById(id: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: this.getOrderInclude(),
+    });
+    if (!order) throw new NotFoundException('Заказ не найден');
+    return this.mapToResponse(order);
   }
 
-  private async validateOrderData(dto: CreateOrderDto) {
-    const [restaurant, products, additives, productPrices] = await Promise.all([
-      this.prisma.restaurant.findUnique({
-        where: { id: dto.restaurantId },
-      }),
-      this.prisma.product.findMany({
-        where: { id: { in: dto.items.map(item => item.productId) } },
-      }),
-      this.prisma.additive.findMany({
-        where: { id: { in: dto.items.flatMap(item => item.additiveIds || []) } },
-      }),
-      this.prisma.restaurantProductPrice.findMany({
-        where: {
-          productId: { in: dto.items.map(item => item.productId) },
-          restaurantId: dto.restaurantId,
+  async findByRestaurantId(restaurantId: string): Promise<OrderResponse[]> {
+    const orders = await this.prisma.order.findMany({
+      where: { restaurantId },
+      include: this.getOrderInclude(),
+      orderBy: { createdAt: 'desc' },
+    });
+    return orders.map(order => this.mapToResponse(order));
+  }
+
+  async getActiveRestaurantOrders(restaurantId: string): Promise<OrderResponse[]> {
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: {
+          notIn: [EnumOrderStatus.CANCELLED, EnumOrderStatus.COMPLETED],
         },
-      }),
-    ]);
+      },
+      orderBy: { createdAt: 'desc' },
+      include: this.getOrderInclude(),
+    });
 
-    if (!restaurant) {
-      throw new NotFoundException('Ресторан не найден');
-    }
+    return orders.map(order => this.mapToResponse(order));
+  }
 
-    if (dto.customerId) {
-      const customerExists = await this.prisma.customer.count({
-        where: { id: dto.customerId },
-      });
-      if (!customerExists) {
-        throw new NotFoundException('Клиент не найден');
+  async getRestaurantArchive(
+    restaurantId: string,
+    page: number = 1,
+    limit: number = 10,
+    filters: {
+      startDate?: Date;
+      endDate?: Date;
+      isReordered?: boolean;
+      hasDiscount?: boolean;
+      discountCanceled?: boolean;
+      isRefund?: boolean;
+      status?: EnumOrderStatus[];
+      searchQuery?: string;
+    } = {}
+  ): Promise<PaginatedResponse<OrderResponse>> {
+    const where: any = {
+      restaurantId,
+    };
+
+    where.status = filters.status?.length 
+      ? { in: filters.status }
+      : { in: [EnumOrderStatus.COMPLETED, EnumOrderStatus.CANCELLED] };
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        where.createdAt.lte = new Date(filters.endDate);
       }
     }
 
-    if (dto.shiftId) {
-      const shiftExists = await this.prisma.shift.count({
-        where: { id: dto.shiftId, restaurantId: dto.restaurantId },
-      });
-      if (!shiftExists) {
-        throw new NotFoundException('Смена не найдена или не принадлежит ресторану');
-      }
+    if (filters.isReordered !== undefined) {
+      where.isReordered = filters.isReordered;
+    }
+    if (filters.hasDiscount !== undefined) {
+      where.hasDiscount = filters.hasDiscount;
+    }
+    if (filters.discountCanceled !== undefined) {
+      where.discountCanceled = filters.discountCanceled;
+    }
+    if (filters.isRefund !== undefined) {
+      where.isRefund = filters.isRefund;
     }
 
-    // Проверка продуктов
-    const missingProducts = dto.items
-      .filter(item => !products.some(p => p.id === item.productId))
-      .map(item => item.productId);
-
-    if (missingProducts.length > 0) {
-      throw new NotFoundException(`Продукты не найдены: ${missingProducts.join(', ')}`);
+    if (filters.searchQuery) {
+      where.OR = [
+        { number: { contains: filters.searchQuery, mode: 'insensitive' } },
+        {
+          customer: {
+            name: { contains: filters.searchQuery, mode: 'insensitive' }
+          }
+        }
+      ];
     }
 
-    // Проверка добавок
-    const allAdditiveIds = dto.items.flatMap(item => item.additiveIds || []);
-    const missingAdditives = allAdditiveIds
-      .filter(id => !additives.some(a => a.id === id));
+    const total = await this.prisma.order.count({ where });
 
-    if (missingAdditives.length > 0) {
-      throw new NotFoundException(`Добавки не найдены: ${missingAdditives.join(', ')}`);
+    const orders = await this.prisma.order.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: this.getOrderInclude(),
+    });
+
+    return {
+      data: orders.map(order => this.mapToResponse(order)),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) throw new NotFoundException('Заказ не найден');
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id },
+      data: { status: dto.status },
+      include: this.getOrderInclude(),
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+  async updateOrderItemStatus(
+    orderId: string,
+    itemId: string,
+    dto: UpdateOrderItemStatusDto
+  ): Promise<OrderResponse> {
+    const item = await this.prisma.orderItem.findFirst({
+      where: { id: itemId, orderId },
+      include: { order: true },
+    });
+
+    if (!item) throw new NotFoundException('Элемент заказа не найден');
+
+
+    const now = new Date();
+    const updateData: any = { status: dto.status };
+
+    switch (dto.status) {
+      case EnumOrderItemStatus.IN_PROGRESS:
+        updateData.startedAt = now;
+        if (dto.userId) {
+          updateData.assignedToId = dto.userId;
+        }
+        break;
+      case EnumOrderItemStatus.COMPLETED:
+        updateData.completedAt = now;
+        break;
+      case EnumOrderItemStatus.CANCELLED:
+        updateData.cancelledAt = now;
+        break;
+      case EnumOrderItemStatus.PAUSED:
+        updateData.pausedAt = now;
+        break;
     }
 
-    return { restaurant, products, additives, productPrices };
+    await this.prisma.orderItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
+
+    const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
+    return this.mapToResponse(updatedOrder);
   }
 
-  private checkStopList(
-    products: { id: string; title: string }[],
-    productPrices: { productId: string; isStopList: boolean }[]
-  ): string[] {
-    return productPrices
-      .filter(pp => pp.isStopList)
-      .map(pp => {
-        const product = products.find(p => p.id === pp.productId);
-        return product?.title || pp.productId;
-      });
-  }
-
-  private calculateOrderTotal(
-    items: CreateOrderDto['items'],
-    additives: { id: string; price: number }[],
-    productPrices: { productId: string; price: number }[]
-  ): number {
-    return items.reduce((sum, item) => {
-      const productPrice = productPrices.find(pp => pp.productId === item.productId)?.price || 0;
-      const itemAdditives = additives.filter(a => item.additiveIds?.includes(a.id));
-      const additivesPrice = itemAdditives.reduce((aSum, a) => aSum + a.price, 0);
-      return sum + (productPrice + additivesPrice) * item.quantity;
-    }, 0);
-  }
-
-
-  async removeItemFromOrder(orderId: string, itemId: string): Promise<OrderResponse> {
+  async bulkUpdateOrderItemsStatus(
+    orderId: string,
+    dto: BulkUpdateOrderItemsStatusDto
+  ): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { 
-        items: {
-          where: { id: itemId },
-          include: { 
-            additives: true,
-            product: true 
-          }
-        },
-        payment: true 
-      },
+      include: { items: true },
     });
 
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
+    if (!order) throw new NotFoundException('Заказ не найден');
+
+    const invalidItems = dto.itemIds.filter(id =>
+      !order.items.some(i => i.id === id)
+    );
+
+    if (invalidItems.length > 0) {
+      throw new BadRequestException(
+        `Элементы не найдены в заказе: ${invalidItems.join(', ')}`
+      );
     }
 
-    const item = order.items[0];
-    if (!item) {
-      throw new NotFoundException('Позиция заказа не найдена');
+    const updateData: any = { status: dto.status };
+    if (dto.status === EnumOrderItemStatus.IN_PROGRESS && dto.userId) {
+      updateData.assignedToId = dto.userId;
+      updateData.startedAt = new Date();
+    }
+    if (dto.status === EnumOrderItemStatus.COMPLETED) {
+      updateData.completedAt = new Date();
     }
 
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя удалить позицию из оплаченного заказа');
-    }
-
-    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
-    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      await prisma.orderItem.delete({
-        where: { id: itemId },
-      });
-
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: { 
-          totalAmount: { decrement: itemTotalPrice },
-        },
-        include: this.getOrderInclude(),
-      });
-
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: itemTotalPrice } },
-        });
-      }
-
-      return updated;
+    await this.prisma.orderItem.updateMany({
+      where: { id: { in: dto.itemIds } },
+      data: updateData,
     });
 
+    const updatedOrder = await this.checkAndUpdateOrderStatus(order);
     return this.mapToResponse(updatedOrder);
   }
 
   async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { restaurant: true, payment: true },
+      include: { 
+        restaurant: true, 
+        payment: true,
+        items: {
+          where: {
+            status: {
+              not: 'CANCELLED'
+            }
+          }
+        }
+      },
     });
 
     if (!order || !order.restaurant) {
@@ -346,8 +403,19 @@ export class OrderService {
     const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
     const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
 
+    const hasConfirmedItems = order.items.some(item => 
+      item.status !== 'CREATED' && item.status !== 'CANCELLED'
+    );
+
     const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      await prisma.orderItem.create({
+      if (hasConfirmedItems) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { isReordered: true },
+        });
+      }
+
+      const newItem = await prisma.orderItem.create({
         data: {
           order: { connect: { id: orderId } },
           product: { connect: { id: dto.productId } },
@@ -355,6 +423,7 @@ export class OrderService {
           price: productPrice.price,
           comment: dto.comment,
           status: 'CREATED',
+          isReordered: hasConfirmedItems,
           additives: dto.additiveIds?.length 
             ? { connect: dto.additiveIds.map(id => ({ id })) }
             : undefined,
@@ -383,67 +452,11 @@ export class OrderService {
     return this.mapToResponse(updatedOrder);
   }
 
-  async generateOrderNumber(restaurantId: string): Promise<string> {
-    const dateStr = new Date()
-      .toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit'
-      })
-      .replace(/\./g, '');
-
-    const randomPart = Math.floor(1000 + Math.random() * 9000);
-    const number = `${dateStr}-${randomPart}`;
-
-    const exists = await this.prisma.order.findUnique({ where: { number } });
-    if (exists) return this.generateOrderNumber(restaurantId);
-
-    return number;
-  }
-
-  async findById(id: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: this.getOrderInclude(),
-    });
-    if (!order) throw new NotFoundException('Заказ не найден');
-    return this.mapToResponse(order);
-  }
-
-  async findByRestaurantId(restaurantId: string): Promise<OrderResponse[]> {
-    const orders = await this.prisma.order.findMany({
-      where: { restaurantId },
-      include: this.getOrderInclude(),
-      orderBy: { createdAt: 'desc' },
-    });
-    return orders.map(order => this.mapToResponse(order));
-  }
-
-  async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: { items: true },
-    });
-
-    if (!order) throw new NotFoundException('Заказ не найден');
-
-   
-
-    const updatedOrder = await this.prisma.order.update({
-      where: { id },
-      data: { status: dto.status },
-      include: this.getOrderInclude(),
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
   async updateOrderItem(
     orderId: string,
     itemId: string,
     dto: UpdateOrderItemDto
   ): Promise<OrderResponse> {
-    // 1. Находим заказ и проверяем его существование
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { 
@@ -464,19 +477,16 @@ export class OrderService {
       throw new NotFoundException('Позиция заказа не найдена');
     }
 
-    // 2. Проверяем статус позиции - можно редактировать только возвращенные
     if (item.status !== 'REFUNDED') {
       throw new BadRequestException(
         'Можно редактировать только возвращенные позиции'
       );
     }
 
-    // 3. Проверяем статус оплаты
     if (order.payment?.status === 'PAID') {
       throw new BadRequestException('Нельзя редактировать позиции в оплаченном заказе');
     }
 
-    // 4. Проверяем добавки, если они указаны
     let additives: any[] = [];
     if (dto.additiveIds?.length) {
       additives = await this.prisma.additive.findMany({
@@ -493,7 +503,6 @@ export class OrderService {
       }
     }
 
-    // 5. Получаем текущую цену продукта
     const productPrice = await this.prisma.restaurantProductPrice.findFirst({
       where: {
         productId: item.productId,
@@ -505,7 +514,6 @@ export class OrderService {
       throw new NotFoundException('Цена продукта не найдена');
     }
 
-    // 6. Рассчитываем разницу в стоимости
     const oldAdditivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
     const newAdditivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
     
@@ -513,7 +521,6 @@ export class OrderService {
     const newItemPrice = (productPrice.price + newAdditivesPrice) * item.quantity;
     const priceDifference = newItemPrice - oldItemPrice;
 
-    // 7. Обновляем позицию в транзакции
     const updatedOrder = await this.prisma.$transaction(async (prisma) => {
       await prisma.orderItem.update({
         where: { id: itemId },
@@ -546,73 +553,224 @@ export class OrderService {
     return this.mapToResponse(updatedOrder);
   }
 
-  async updateOrderItemStatus(
-    orderId: string,
-    itemId: string,
-    dto: UpdateOrderItemStatusDto
-  ): Promise<OrderResponse> {
-    const item = await this.prisma.orderItem.findFirst({
-      where: { id: itemId, orderId },
-      include: { order: true },
+  async removeItemFromOrder(orderId: string, itemId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { 
+            additives: true,
+            product: true 
+          }
+        },
+        payment: true 
+      },
     });
 
-    if (!item) throw new NotFoundException('Элемент заказа не найден');
-
-    const updateData: any = { status: dto.status };
-    if (dto.status === EnumOrderItemStatus.IN_PROGRESS && dto.userId) {
-      updateData.assignedToId = dto.userId;
-      updateData.startedAt = new Date();
-    }
-    if (dto.status === EnumOrderItemStatus.COMPLETED) {
-      updateData.completedAt = new Date();
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
     }
 
-    await this.prisma.orderItem.update({
-      where: { id: itemId },
-      data: updateData,
+    const item = order.items[0];
+    if (!item) {
+      throw new NotFoundException('Позиция заказа не найдена');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя удалить позицию из оплаченного заказа');
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.delete({
+        where: { id: itemId },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { decrement: itemTotalPrice },
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: itemTotalPrice } },
+        });
+      }
+
+      return updated;
     });
 
-    const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
     return this.mapToResponse(updatedOrder);
   }
 
-  async bulkUpdateOrderItemsStatus(
+  async refundOrderItem(
     orderId: string,
-    dto: BulkUpdateOrderItemsStatusDto
+    itemId: string,
+    reason: string
   ): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { additives: true }
+        },
+        payment: true 
+      },
     });
 
-    if (!order) throw new NotFoundException('Заказ не найден');
-
-    const invalidItems = dto.itemIds.filter(id =>
-      !order.items.some(i => i.id === id)
-    );
-
-    if (invalidItems.length > 0) {
-      throw new BadRequestException(
-        `Элементы не найдены в заказе: ${invalidItems.join(', ')}`
-      );
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
     }
 
-    const updateData: any = { status: dto.status };
-    if (dto.status === EnumOrderItemStatus.IN_PROGRESS && dto.userId) {
-      updateData.assignedToId = dto.userId;
-      updateData.startedAt = new Date();
-    }
-    if (dto.status === EnumOrderItemStatus.COMPLETED) {
-      updateData.completedAt = new Date();
+    const item = order.items[0];
+    if (!item) {
+      throw new NotFoundException('Позиция заказа не найдена');
     }
 
-    await this.prisma.orderItem.updateMany({
-      where: { id: { in: dto.itemIds } },
-      data: updateData,
+    if (item.isRefund) {
+      throw new BadRequestException('Этот товар уже был возвращен');
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.update({
+        where: { id: itemId },
+        data: { 
+          isRefund: true,
+          refundReason: reason,
+          status: 'REFUNDED',
+          refundedAt: new Date(),
+        },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { decrement: itemTotalPrice },
+          isRefund: true,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: itemTotalPrice } },
+        });
+      }
+
+      return updated;
     });
 
-    const updatedOrder = await this.checkAndUpdateOrderStatus(order);
     return this.mapToResponse(updatedOrder);
+  }
+
+  async updateOrder(id: string, dto: UpdateOrderDto): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { payment: true }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    const updateData: any = {
+      type: dto.type,
+      numberOfPeople: dto.numberOfPeople?.toString(),
+      tableNumber: dto.tableNumber?.toString(),
+      comment: dto.comment,
+      deliveryAddress: dto.deliveryAddress,
+      deliveryTime: dto.deliveryTime ? timeStringToISODate(dto.deliveryTime) : undefined,
+      deliveryNotes: dto.deliveryNotes,
+      scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
+    };
+
+    if (dto.customerId !== undefined) {
+      if (dto.customerId) {
+        const customerExists = await this.prisma.customer.count({
+          where: { id: dto.customerId },
+        });
+        if (!customerExists) {
+          throw new NotFoundException('Клиент не найден');
+        }
+        updateData.customer = { connect: { id: dto.customerId } };
+      } else {
+        updateData.customer = { disconnect: true };
+      }
+    }
+
+    if (dto.customerPhone) {
+      updateData.customerPhone = dto.customerPhone;
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id },
+      data: updateData,
+      include: this.getOrderInclude(),
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+  async updateAttentionFlags(
+    id: string,
+    dto: UpdateAttentionFlagsDto
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    const updateData: any = {};
+    if (dto.isReordered !== undefined) updateData.isReordered = dto.isReordered;
+    if (dto.hasDiscount !== undefined) updateData.hasDiscount = dto.hasDiscount;
+    if (dto.discountCanceled !== undefined) updateData.discountCanceled = dto.discountCanceled;
+    if (dto.isPrecheck !== undefined) updateData.isPrecheck = dto.isPrecheck;
+    if (dto.isRefund !== undefined) updateData.isRefund = dto.isRefund;
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id },
+      data: updateData,
+      include: this.getOrderInclude(),
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+  private async generateOrderNumber(restaurantId: string): Promise<string> {
+    const dateStr = new Date()
+      .toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit'
+      })
+      .replace(/\./g, '');
+
+    const randomPart = Math.floor(1000 + Math.random() * 9000);
+    const number = `${dateStr}-${randomPart}`;
+
+    const exists = await this.prisma.order.findUnique({ where: { number } });
+    if (exists) return this.generateOrderNumber(restaurantId);
+
+    return number;
   }
 
   private async checkAndUpdateOrderStatus(order: any): Promise<any> {
@@ -696,6 +854,104 @@ export class OrderService {
     return transitions[currentStatus]?.includes(newStatus) || false;
   }
 
+  private async validateOrderData(dto: CreateOrderDto) {
+    const [restaurant, products, additives, productPrices] = await Promise.all([
+      this.prisma.restaurant.findUnique({
+        where: { id: dto.restaurantId },
+      }),
+      this.prisma.product.findMany({
+        where: { id: { in: dto.items.map(item => item.productId) } },
+      }),
+      this.prisma.additive.findMany({
+        where: { id: { in: dto.items.flatMap(item => item.additiveIds || []) } },
+      }),
+      this.prisma.restaurantProductPrice.findMany({
+        where: {
+          productId: { in: dto.items.map(item => item.productId) },
+          restaurantId: dto.restaurantId,
+        },
+      }),
+    ]);
+
+    if (!restaurant) {
+      throw new NotFoundException('Ресторан не найден');
+    }
+
+    if (dto.customerId) {
+      const customerExists = await this.prisma.customer.count({
+        where: { id: dto.customerId },
+      });
+      if (!customerExists) {
+        throw new NotFoundException('Клиент не найден');
+      }
+    }
+
+    if (dto.shiftId) {
+      const shiftExists = await this.prisma.shift.count({
+        where: { id: dto.shiftId, restaurantId: dto.restaurantId },
+      });
+      if (!shiftExists) {
+        throw new NotFoundException('Смена не найдена или не принадлежит ресторану');
+      }
+    }
+
+    const missingProducts = dto.items
+      .filter(item => !products.some(p => p.id === item.productId))
+      .map(item => item.productId);
+
+    if (missingProducts.length > 0) {
+      throw new NotFoundException(`Продукты не найдены: ${missingProducts.join(', ')}`);
+    }
+
+    const allAdditiveIds = dto.items.flatMap(item => item.additiveIds || []);
+    const missingAdditives = allAdditiveIds
+      .filter(id => !additives.some(a => a.id === id));
+
+    if (missingAdditives.length > 0) {
+      throw new NotFoundException(`Добавки не найдены: ${missingAdditives.join(', ')}`);
+    }
+
+    return { restaurant, products, additives, productPrices };
+  }
+
+  private checkStopList(
+    products: { id: string; title: string }[],
+    productPrices: { productId: string; isStopList: boolean }[]
+  ): string[] {
+    return productPrices
+      .filter(pp => pp.isStopList)
+      .map(pp => {
+        const product = products.find(p => p.id === pp.productId);
+        return product?.title || pp.productId;
+      });
+  }
+
+  private calculateOrderTotal(
+    items: CreateOrderDto['items'],
+    additives: { id: string; price: number }[],
+    productPrices: { productId: string; price: number }[]
+  ): number {
+    return items.reduce((sum, item) => {
+      const productPrice = productPrices.find(pp => pp.productId === item.productId)?.price || 0;
+      const itemAdditives = additives.filter(a => item.additiveIds?.includes(a.id));
+      const additivesPrice = itemAdditives.reduce((aSum, a) => aSum + a.price, 0);
+      return sum + (productPrice + additivesPrice) * item.quantity;
+    }, 0);
+  }
+
+  private calculateSurchargesTotal(
+    surcharges: { amount: number; type: 'FIXED' | 'PERCENTAGE' }[],
+    baseAmount: number
+  ): number {
+    return surcharges.reduce((total, surcharge) => {
+      if (surcharge.type === 'FIXED') {
+        return total + surcharge.amount;
+      } else {
+        return total + (baseAmount * surcharge.amount) / 100;
+      }
+    }, 0);
+  }
+
   private getOrderInclude() {
     return {
       items: {
@@ -711,7 +967,7 @@ export class OrderService {
                 }
               },
               additives: true,
-               ingredients: {
+              ingredients: {
                 include: {
                   inventoryItem: true 
                 }
@@ -719,7 +975,7 @@ export class OrderService {
               workshops: {
                 include: {
                   workshop: true 
-              }
+                }
               },
             },
           },
@@ -729,7 +985,6 @@ export class OrderService {
               name: true,
             },
           },
-          
         },
       },
       customer: true,
@@ -748,6 +1003,16 @@ export class OrderService {
     const itemsWithTotals = order.items?.map((item: any) => ({
       ...item,
       totalPrice: (item.price + (item.additives?.reduce((sum: number, a: any) => sum + a.price, 0) || 0)) * item.quantity,
+      isReordered: item.isReordered,
+      isRefund: item.isRefund,
+      refundReason: item.refundReason,
+      timestamps: {
+        createdAt: item.createdAt,
+        startedAt: item.startedAt,
+        completedAt: item.completedAt,
+        pausedAt: item.pausedAt,
+        refundedAt: item.refundedAt,
+      }
     })) || [];
 
     const totalPrice = itemsWithTotals.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
@@ -757,7 +1022,6 @@ export class OrderService {
       id: order.id,
       number: order.number,
       status: order.status,
-      
       source: order.source,
       type: order.type,
       createdAt: order.createdAt,
@@ -767,7 +1031,7 @@ export class OrderService {
       tableNumber: order.tableNumber,
       numberOfPeople: order.numberOfPeople,
       totalPrice,
-      totalAmount: order.totalAmount ,
+      totalAmount: order.totalAmount,
       totalItems,
       restaurantId: order.restaurantId,
       customer: order.customer ? {
@@ -784,6 +1048,10 @@ export class OrderService {
       items: itemsWithTotals.map(item => ({
         id: item.id,
         status: item.status,
+        isReordered: item.isReordered,
+        timestamps: item.timestamps,
+        isRefund: item.isRefund,
+        refundReason: item.refundReason,
         assignedTo: item.assignedTo ? {
           id: item.assignedTo.id,
           name: item.assignedTo.name,
@@ -818,13 +1086,20 @@ export class OrderService {
         notes: order.deliveryNotes,
       } : undefined,
       surcharges: order.surcharges?.map(s => ({
-      id: s.id,
-      surchargeId: s.surchargeId,
-      title: s.surcharge?.title || s.description || 'Надбавка',
-      amount: s.amount,
-      type: s.surcharge?.type || 'FIXED',
-      description: s.description
-       })) || [],
+        id: s.id,
+        surchargeId: s.surchargeId,
+        title: s.surcharge?.title || s.description || 'Надбавка',
+        amount: s.amount,
+        type: s.surcharge?.type || 'FIXED',
+        description: s.description
+      })) || [],
+      attentionFlags: {
+        isReordered: order.isReordered,
+        hasDiscount: order.hasDiscount,
+        discountCanceled: order.discountCanceled,
+        isPrecheck: order.isPrecheck,
+        isRefund: order.isRefund,
+      },
     };
   }
 }
