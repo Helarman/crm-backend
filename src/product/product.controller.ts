@@ -110,4 +110,21 @@ import {
 	async getIngredients(@Param('id') id: string) {
 	return this.productService.getIngredients(id);
 	}
+
+	@Get('by-category/:categoryId')
+	@ApiOperation({ summary: 'Получить товары по категории' })
+	@ApiParam({ 
+	name: 'categoryId', 
+	description: 'ID категории' 
+	})
+	@ApiOkResponse({ 
+	description: 'Список товаров категории успешно получен' 
+	})
+	@ApiNotFoundResponse({ 
+	description: 'Категория не найдена' 
+	})
+	async getByCategory(@Param('categoryId') categoryId: string) {
+	return this.productService.getByCategory(categoryId);
+	}
+
 }

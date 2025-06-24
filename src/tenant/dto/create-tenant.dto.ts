@@ -12,7 +12,6 @@ export class CreateTenantDto {
   type: TenantType;
 
   @ApiProperty({ required: false })
-  @IsUrl()
   @IsOptional()
   domain?: string;
 

@@ -76,6 +76,8 @@ model Restaurant {
   images      String[]
   latitude    String
   longitude   String
+  legalInfo   String?  @map("legal_info") 
+
   users     User[]    @relation("RestaurantToUser")
   products  Product[] @relation("RestaurantToProduct")
   shifts    Shift[]   @relation("RestaurantToShift")
@@ -676,7 +678,7 @@ model Tenant {
   name        String
   type        TenantType  @default(API)
   domain      String?     
-  subdomain   String?     @unique
+  subdomain   String?    
   isActive    Boolean     @default(true)
   
   logo        String?

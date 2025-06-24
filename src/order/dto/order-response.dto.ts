@@ -1,5 +1,4 @@
-
-import { EnumOrderStatus, EnumPaymentStatus, EnumPaymentMethod, EnumOrderType} from '@prisma/client';
+import { EnumOrderStatus, EnumPaymentStatus, EnumPaymentMethod, EnumOrderType } from '@prisma/client';
 
 export class OrderResponse {
   source?: string;
@@ -22,30 +21,62 @@ export class OrderResponse {
     id: string;
     name: string;
     address: string;
+    legalInfo?: string;
+    network?: {
+      id: string;
+      name: string;
+      tenant?: {
+        domain?: string;
+        subdomain?: string;
+      };
+    };
   };
   restaurantId: string;
   items: Array<{
     id: string;
-    product: {
+    status: string;
+    isReordered: boolean;
+    isRefund: boolean;
+    refundReason?: string;
+    timestamps?: {
+      createdAt: Date;
+      startedAt?: Date;
+      completedAt?: Date;
+      pausedAt?: Date;
+      refundedAt?: Date;
+    };
+    assignedTo?: {
       id: string;
       name: string;
+    } | null;
+    product: {
+      id: string;
+      title: string;
       price: number;
       image?: string;
-      workshops: {
-        id: string,
-        name: string
-      };
+      workshops: Array<{
+        id: string;
+        name: string;
+      }>;
+      ingredients: Array<{
+        id: string;
+        name: string;
+      }>;
+      restaurantPrices: Array<{
+        price: number;
+        isStopList: boolean;
+      }>;
     };
     quantity: number;
     comment?: string;
-    status: string;
     additives: Array<{
       id: string;
-      name: string;
+      title: string;
       price: number;
     }>;
+    totalPrice: number;
   }>;
-  numberOfPeople?: string
+  numberOfPeople?: string;
   payment?: {
     id: string;
     method: EnumPaymentMethod;
@@ -59,21 +90,21 @@ export class OrderResponse {
     notes?: string;
   };
   totalPrice: number;
-  totalAmount: number; 
+  totalAmount: number;
   totalItems: number;
-  surcharges?: {
+  surcharges?: Array<{
     id: string;
     surchargeId: string;
     title: string;
     amount: number;
     type: 'FIXED' | 'PERCENTAGE';
     description?: string;
-  }[];
+  }>;
   attentionFlags: {
     isReordered: boolean;
     hasDiscount: boolean;
     discountCanceled: boolean;
     isPrecheck: boolean;
     isRefund: boolean;
-  }
+  };
 }

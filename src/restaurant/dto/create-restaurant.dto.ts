@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { ArrayMinSize, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRestaurantDto {
@@ -45,6 +45,10 @@ export class CreateRestaurantDto {
   })
   images: string[];
 
+  @IsOptional()
+  @IsString()
+  legalInfo?: string;
+  
   @ApiProperty({
     type: String,
     example: '55.752023',

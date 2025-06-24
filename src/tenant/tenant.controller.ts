@@ -72,4 +72,19 @@ export class TenantController {
   async delete(@Param('id') id: string) {
     return this.tenantService.delete(id);
   }
+
+  @Get('domain/:domain')
+  @ApiOperation({ 
+    summary: 'Получить тенант по домену/поддомену',
+    description: 'Возвращает полную информацию о тенанте, включая сети, рестораны, зоны доставки и т.д.' 
+  })
+  @ApiParam({ name: 'domain', example: 'burger-empire' })
+  @ApiResponse({ 
+    status: 200,
+    description: 'Тенант и связанные данные' 
+  })
+  @ApiResponse({ status: 404, description: 'Домен не найден' })
+  async getByDomain(@Param('domain') domain: string) {
+    return this.tenantService.getByDomain(domain);
+  }
 }

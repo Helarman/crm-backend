@@ -195,6 +195,33 @@ export class ProductService {
     });
   }
   
+  async getByCategory(categoryId: string) {
+    return this.prisma.product.findMany({
+      where: {
+        categoryId,
+        publishedOnWebsite: true // только опубликованные на сайте
+      },
+      include: {
+        restaurantPrices: {
+          where: {
+            isStopList: false // исключаем стоп-лист
+          }
+        },
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+      },
+      orderBy: {
+        createdAt: 'desc' // сортировка по новизне
+      }
+    });
+  }
+
+
   async getRestaurantPrices(productId: string) {
     const prices = await this.prisma.restaurantProductPrice.findMany({
       where: { productId },

@@ -237,4 +237,42 @@ export class TenantService {
       throw new InternalServerErrorException('Failed to fetch tenant by network ID');
     }
   }
+
+  async getByDomain(domain: string) {
+    try {
+      // Ищем тенант по domain или subdomain
+      const tenant = await this.prisma.tenant.findMany({
+        where: {
+          OR: [
+            { domain: domain },
+            { subdomain: domain }
+          ]
+        },
+        include: {
+          network: {
+            include: {
+              owner: true,
+              restaurants: {
+                include: {
+                  delivery_zones: true,
+                  productPrices: true,
+                  users: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!tenant) {
+        throw new NotFoundException('Тенант не найден');
+      }
+
+      return tenant;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Ошибка при получении тенанта');
+    }
+  }
+
 }

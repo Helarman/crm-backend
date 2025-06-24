@@ -1,4 +1,4 @@
-import { IsArray, IsOptional } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 
 export class UpdateRestaurantDto {
   @IsOptional()
@@ -23,5 +23,8 @@ export class UpdateRestaurantDto {
   @IsOptional()
   description?: string;
 
-
+  @IsOptional()
+  @IsString()
+  legalInfo?: string;
+  
 }

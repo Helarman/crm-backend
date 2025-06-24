@@ -106,19 +106,77 @@ export class OrderService {
   async findById(id: string): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
+    
     if (!order) throw new NotFoundException('Заказ не найден');
-    return this.mapToResponse(order);
+    
+    const response = this.mapToResponse(order);
+    
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: order.restaurant?.legalInfo,
+        network: order.restaurant?.network ? {
+          id: order.restaurant.network.id,
+          name: order.restaurant.network.name,
+          tenant: order.restaurant.network.tenant ? {
+            domain: order.restaurant.network.tenant.domain,
+            subdomain: order.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async findByRestaurantId(restaurantId: string): Promise<OrderResponse[]> {
     const orders = await this.prisma.order.findMany({
       where: { restaurantId },
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return orders.map(order => this.mapToResponse(order));
+    
+    return orders.map(order => {
+      const response = this.mapToResponse(order);
+      return {
+        ...response,
+        restaurant: {
+          ...response.restaurant,
+          legalInfo: order.restaurant?.legalInfo,
+          network: order.restaurant?.network ? {
+            id: order.restaurant.network.id,
+            name: order.restaurant.network.name,
+            tenant: order.restaurant.network.tenant ? {
+              domain: order.restaurant.network.tenant.domain,
+              subdomain: order.restaurant.network.tenant.subdomain
+            } : undefined
+          } : undefined
+        }
+      };
+    });
   }
 
   async getActiveRestaurantOrders(restaurantId: string): Promise<OrderResponse[]> {
@@ -133,10 +191,38 @@ export class OrderService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
 
-    return orders.map(order => this.mapToResponse(order));
+    return orders.map(order => {
+      const response = this.mapToResponse(order);
+      return {
+        ...response,
+        restaurant: {
+          ...response.restaurant,
+          legalInfo: order.restaurant?.legalInfo,
+          network: order.restaurant?.network ? {
+            id: order.restaurant.network.id,
+            name: order.restaurant.network.name,
+            tenant: order.restaurant.network.tenant ? {
+              domain: order.restaurant.network.tenant.domain,
+              subdomain: order.restaurant.network.tenant.subdomain
+            } : undefined
+          } : undefined
+        }
+      };
+    });
   }
 
   async getRestaurantArchive(
@@ -203,11 +289,39 @@ export class OrderService {
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { createdAt: 'desc' },
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
 
     return {
-      data: orders.map(order => this.mapToResponse(order)),
+      data: orders.map(order => {
+        const response = this.mapToResponse(order);
+        return {
+          ...response,
+          restaurant: {
+            ...response.restaurant,
+            legalInfo: order.restaurant?.legalInfo,
+            network: order.restaurant?.network ? {
+              id: order.restaurant.network.id,
+              name: order.restaurant.network.name,
+              tenant: order.restaurant.network.tenant ? {
+                domain: order.restaurant.network.tenant.domain,
+                subdomain: order.restaurant.network.tenant.subdomain
+              } : undefined
+            } : undefined
+          }
+        };
+      }),
       meta: {
         total,
         page,
@@ -228,10 +342,36 @@ export class OrderService {
     const updatedOrder = await this.prisma.order.update({
       where: { id },
       data: { status: dto.status },
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async updateOrderItemStatus(
@@ -245,7 +385,6 @@ export class OrderService {
     });
 
     if (!item) throw new NotFoundException('Элемент заказа не найден');
-
 
     const now = new Date();
     const updateData: any = { status: dto.status };
@@ -274,7 +413,22 @@ export class OrderService {
     });
 
     const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async bulkUpdateOrderItemsStatus(
@@ -313,14 +467,37 @@ export class OrderService {
     });
 
     const updatedOrder = await this.checkAndUpdateOrderStatus(order);
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { 
-        restaurant: true, 
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }, 
         payment: true,
         items: {
           where: {
@@ -436,7 +613,18 @@ export class OrderService {
           totalAmount: { increment: itemPrice },
           status: order.status === 'COMPLETED' ? 'CONFIRMED' : order.status,
         },
-        include: this.getOrderInclude(),
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
       });
 
       if (order.payment) {
@@ -449,7 +637,22 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async updateOrderItem(
@@ -464,7 +667,16 @@ export class OrderService {
           where: { id: itemId },
           include: { additives: true }
         },
-        payment: true 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
       },
     });
 
@@ -537,7 +749,18 @@ export class OrderService {
         data: { 
           totalAmount: { increment: priceDifference },
         },
-        include: this.getOrderInclude(),
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
       });
 
       if (order.payment) {
@@ -550,7 +773,22 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async removeItemFromOrder(orderId: string, itemId: string): Promise<OrderResponse> {
@@ -564,7 +802,16 @@ export class OrderService {
             product: true 
           }
         },
-        payment: true 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
       },
     });
 
@@ -594,7 +841,18 @@ export class OrderService {
         data: { 
           totalAmount: { decrement: itemTotalPrice },
         },
-        include: this.getOrderInclude(),
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
       });
 
       if (order.payment) {
@@ -607,7 +865,22 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async refundOrderItem(
@@ -622,7 +895,16 @@ export class OrderService {
           where: { id: itemId },
           include: { additives: true }
         },
-        payment: true 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
       },
     });
 
@@ -659,7 +941,18 @@ export class OrderService {
           totalAmount: { decrement: itemTotalPrice },
           isRefund: true,
         },
-        include: this.getOrderInclude(),
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
       });
 
       if (order.payment) {
@@ -672,13 +965,39 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async updateOrder(id: string, dto: UpdateOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { payment: true }
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!order) {
@@ -721,10 +1040,36 @@ export class OrderService {
     const updatedOrder = await this.prisma.order.update({
       where: { id },
       data: updateData,
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   async updateAttentionFlags(
@@ -733,6 +1078,17 @@ export class OrderService {
   ): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id },
+      include: {
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!order) {
@@ -749,10 +1105,36 @@ export class OrderService {
     const updatedOrder = await this.prisma.order.update({
       where: { id },
       data: updateData,
-      include: this.getOrderInclude(),
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
   }
 
   private async generateOrderNumber(restaurantId: string): Promise<string> {
@@ -790,7 +1172,18 @@ export class OrderService {
       return this.prisma.order.update({
         where: { id: order.id },
         data: { status: newStatus },
-        include: this.getOrderInclude(),
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
       });
     }
 

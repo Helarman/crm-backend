@@ -14,7 +14,6 @@ export class UpdateTenantDto {
   type?: TenantType;
 
   @ApiProperty({ required: false })
-  @IsUrl()
   @IsOptional()
   domain?: string;
 

@@ -7,7 +7,7 @@ import * as crypto from 'crypto';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: ['http://localhost:3000', 'https://crm-frontend-v7zf.onrender.com'],
+    origin: ['http://localhost:3000', 'https://crm-frontend-v7zf.onrender.com', 'http://localhost:3001'],
     credentials: true,
     allowedHeaders: [
       'Authorization',
