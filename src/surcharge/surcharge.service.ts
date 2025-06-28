@@ -128,20 +128,6 @@ export class SurchargeService {
       orderTypes: {
         has: orderType
       },
-      AND: [
-        {
-            OR: [
-            { startDate: null },
-            { startDate: { lte: new Date() } }
-            ]
-        },
-        {
-            OR: [
-            { endDate: null },
-            { endDate: { gte: new Date() } }
-            ]
-        }
-        ]
     };
 
     if (restaurantId) {

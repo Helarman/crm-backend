@@ -7,6 +7,8 @@ import { VerifyCodeResponseDto } from './dto/verify-code-response.dto';
 import { CustomerDto } from './dto/customer.dto';
 import { UpdateBonusPointsDto } from './dto/update-bonus-points.dto';
 import { IncrementBonusPointsDto } from './dto/increment-bonus-points.dto';
+import { ShortCodeResponseDto } from './dto/short-code-response.dto';
+import { UpdatePersonalDiscountDto } from './dto/update-personal-discount.dto';
 
 @ApiTags('Верификация клиента')
 @Controller('customer-verification')
@@ -153,4 +155,52 @@ export class CustomerVerificationController {
   ) {
     return this.verificationService.incrementBonusPoints(customerId, dto.points);
   }
+
+  @Post('customer/:id/short-code')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Генерация нового 4-символьного кода', 
+    description: 'Генерирует новый 4-символьный код, действительный 2 минуты' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Код успешно сгенерирован',
+    type: ShortCodeResponseDto
+  })
+  async generateShortCode(@Param('id') customerId: string) {
+    return this.verificationService.generateNewShortCode(customerId);
+  }
+
+  @Get('short-code/:code')
+  @ApiOperation({ 
+    summary: 'Получение клиента по 4-символьному коду', 
+    description: 'Возвращает информацию о клиенте по 4-символьному коду (действителен 2 минуты)' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Информация о клиенте успешно получена',
+    type: CustomerDto
+  })
+  async getCustomerByShortCode(@Param('code') code: string) {
+    return this.verificationService.getCustomerByShortCode(code);
+  }
+
+  @Patch('customer/:id/personal-discount')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Обновление персональной скидки', 
+    description: 'Устанавливает новое значение персональной скидки (0-100%)' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Персональная скидка успешно обновлена',
+    type: CustomerDto
+  })
+  async updatePersonalDiscount(
+    @Param('id') customerId: string,
+    @Body() dto: UpdatePersonalDiscountDto
+  ) {
+    return this.verificationService.updatePersonalDiscount(customerId, dto.discount);
+  }
+  
 }

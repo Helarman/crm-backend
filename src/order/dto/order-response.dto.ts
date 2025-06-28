@@ -11,11 +11,28 @@ export class OrderResponse {
   updatedAt: Date;
   scheduledAt?: Date;
   comment?: string;
+  discountAmount: number;
+  bonusPointsUsed: number;
   customer?: {
     id: string;
     name: string;
     phone: string;
     email?: string;
+    bonusPoints?: number;
+    personalDiscount?: number;
+  };
+  discountInfo?: {
+    appliedDiscounts: Array<{
+      id: string;
+      title: string;
+      amount: number;
+      type: 'PERCENTAGE' | 'FIXED';
+    }>;
+    totalDiscount: number;
+  };
+  bonusInfo?: {
+    pointsUsed: number;
+    pointsValue: number; // в рублях
   };
   restaurant: {
     id: string;

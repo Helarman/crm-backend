@@ -1,75 +1,80 @@
+
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
-import { CreateDiscountDto } from './dto/create-discount.dto';
-import { UpdateDiscountDto } from './dto/update-discount.dto';
-import { Discount, Prisma, Order, DiscountType, DayOfWeek, PromoCode } from '@prisma/client';
-import { DateTime } from 'luxon';
+import { CreateDiscountDto, UpdateDiscountDto } from './dto';
+import { Discount, DiscountTargetType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class DiscountsService {
   constructor(private prisma: PrismaService) {}
 
-  // ==================== CRUD Operations ====================
+  async createDiscount(dto: CreateDiscountDto): Promise<Discount> {
+    // Валидация времени
+    if (dto.startTime !== undefined && dto.endTime !== undefined) {
+      if (dto.startTime < 0 || dto.startTime > 23 || dto.endTime < 0 || dto.endTime > 23) {
+        throw new BadRequestException('Time must be between 0 and 23');
+      }
+      if (dto.startTime >= dto.endTime) {
+        throw new BadRequestException('Start time must be before end time');
+      }
+    }
 
-  async createDiscount(data: CreateDiscountDto): Promise<Discount> {
-    const { restaurants, categories, products, daysOfWeek, ...discountData } = data;
- 
-    if (data.code) {
+    // Валидация дат
+    if (dto.startDate && dto.endDate && new Date(dto.startDate) >= new Date(dto.endDate)) {
+      throw new BadRequestException('Start date must be before end date');
+    }
+
+    // Проверка уникальности кода
+    if (dto.code) {
       const existingDiscount = await this.prisma.discount.findFirst({
-        where: { code: data.code },
+        where: { code: dto.code },
       });
       if (existingDiscount) {
         throw new BadRequestException('Discount with this code already exists');
       }
     }
 
-    const mappedDays = daysOfWeek?.map(day => 
-      typeof day === 'number' ? this.mapDayNumberToDayOfWeek(day) : day
-    ) || [];
-
-    const discount = await this.prisma.discount.create({
+    // Создание скидки
+    return this.prisma.discount.create({
       data: {
-        ...discountData,
-        daysOfWeek: mappedDays,
-        restaurants: restaurants && {
+        title: dto.title,
+        description: dto.description,
+        type: dto.type,
+        value: dto.value,
+        targetType: dto.targetType,
+        minOrderAmount: dto.minOrderAmount,
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        isActive: dto.isActive,
+        code: dto.code,
+        maxUses: dto.maxUses,
+        restaurants: dto.restaurantIds && {
           createMany: {
-            data: restaurants.map(r => ({ restaurantId: r.restaurantId })),
+            data: dto.restaurantIds.map(restaurantId => ({ restaurantId })),
           },
         },
-        categories: categories && {
+        products: dto.productIds && {
           createMany: {
-            data: categories.map(c => ({ categoryId: c.categoryId })),
-          },
-        },
-        products: products && {
-          createMany: {
-            data: products.map(p => ({ productId: p.productId })),
+            data: dto.productIds.map(productId => ({ productId })),
           },
         },
       },
+      include: this.getDiscountIncludes(),
     });
-
-    return discount;
   }
 
   async findAllDiscounts(): Promise<Discount[]> {
     return this.prisma.discount.findMany({
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
+      include: this.getDiscountIncludes(),
     });
   }
 
   async findDiscountById(id: string): Promise<Discount> {
     const discount = await this.prisma.discount.findUnique({
       where: { id },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
+      include: this.getDiscountIncludes(),
     });
 
     if (!discount) {
@@ -79,35 +84,61 @@ export class DiscountsService {
     return discount;
   }
 
-  async updateDiscount(id: string, data: UpdateDiscountDto): Promise<Discount> {
-    const { restaurants, categories, products, daysOfWeek, ...discountData } = data;
-
-    const mappedDays = daysOfWeek?.map(day => 
-      typeof day === 'number' ? this.mapDayNumberToDayOfWeek(day) : day
-    ) || [];
-
-    const discount = await this.prisma.discount.update({
-      where: { id },
-      data: {
-        ...discountData,
-        daysOfWeek: mappedDays
+  async updateDiscount(id: string, dto: UpdateDiscountDto): Promise<Discount> {
+    const existingDiscount = await this.findDiscountById(id);
+    
+    // Валидация времени
+    if (dto.startTime !== undefined && dto.endTime !== undefined) {
+      if (dto.startTime < 0 || dto.startTime > 23 || dto.endTime < 0 || dto.endTime > 23) {
+        throw new BadRequestException('Time must be between 0 and 23');
       }
+      if (dto.startTime >= dto.endTime) {
+        throw new BadRequestException('Start time must be before end time');
+      }
+    }
+
+    // Валидация дат
+    if (dto.startDate && dto.endDate && new Date(dto.startDate) >= new Date(dto.endDate)) {
+      throw new BadRequestException('Start date must be before end date');
+    }
+
+    // Обновление скидки
+    const updateData: Prisma.DiscountUpdateInput = {
+      title: dto.title,
+      description: dto.description,
+      type: dto.type,
+      value: dto.value,
+      targetType: dto.targetType,
+      minOrderAmount: dto.minOrderAmount,
+      startDate: dto.startDate ? new Date(dto.startDate) : null,
+      endDate: dto.endDate ? new Date(dto.endDate) : null,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      isActive: dto.isActive,
+      code: dto.code,
+      maxUses: dto.maxUses,
+    };
+
+    // Обновляем скидку
+    const updatedDiscount = await this.prisma.discount.update({
+      where: { id },
+      data: updateData,
+      include: this.getDiscountIncludes(),
     });
 
-    if (restaurants || categories || products) {
+    // Обновляем связи с ресторанами и продуктами, если они предоставлены
+    if (dto.restaurantIds || dto.productIds) {
       await this.prisma.$transaction([
+        // Удаляем старые связи
         this.prisma.restaurantDiscount.deleteMany({ where: { discountId: id } }),
-        this.prisma.categoryDiscount.deleteMany({ where: { discountId: id } }),
         this.prisma.productDiscount.deleteMany({ where: { discountId: id } }),
 
-        restaurants && this.prisma.restaurantDiscount.createMany({
-          data: restaurants.map(r => ({ discountId: id, restaurantId: r.restaurantId })),
+        // Создаем новые связи
+        dto.restaurantIds && this.prisma.restaurantDiscount.createMany({
+          data: dto.restaurantIds.map(restaurantId => ({ discountId: id, restaurantId })),
         }),
-        categories && this.prisma.categoryDiscount.createMany({
-          data: categories.map(c => ({ discountId: id, categoryId: c.categoryId })),
-        }),
-        products && this.prisma.productDiscount.createMany({
-          data: products.map(p => ({ discountId: id, productId: p.productId })),
+        dto.productIds && this.prisma.productDiscount.createMany({
+          data: dto.productIds.map(productId => ({ discountId: id, productId })),
         }),
       ].filter(Boolean) as Prisma.PrismaPromise<any>[]);
     }
@@ -115,554 +146,247 @@ export class DiscountsService {
     return this.findDiscountById(id);
   }
 
-  async deleteDiscount(id: string): Promise<Discount> {
-    return this.prisma.discount.delete({
+async deleteDiscount(id: string): Promise<Discount> {
+  const discount = await this.findDiscountById(id);
+  
+  return this.prisma.$transaction(async (prisma) => {
+    // 1. First delete all related restaurant associations
+    await prisma.restaurantDiscount.deleteMany({
+      where: { discountId: id }
+    });
+
+    // 2. Delete all related product associations
+    await prisma.productDiscount.deleteMany({
+      where: { discountId: id }
+    });
+
+    // 3. Delete all discount applications
+    await prisma.discountApplication.deleteMany({
+      where: { discountId: id }
+    });
+
+    // 4. Delete all related promo codes
+    await prisma.promoCode.deleteMany({
+      where: { discountId: id }
+    });
+
+    // 5. Finally delete the discount itself
+    return prisma.discount.delete({
       where: { id },
+      include: this.getDiscountIncludes(),
     });
-  }
+  });
+}
 
-  // ==================== Discount Application ====================
-
-  async applyDiscountToOrder(
-    orderId: string,
-    discountId: string,
-    customerId?: string
-  ): Promise<{ discountAmount: number; updatedOrder: Order }> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException(`Order with ID ${orderId} not found`);
-    }
-
-    const discount = await this.findDiscountById(discountId);
-    
-    const validation = await this.validateDiscount(
-      discountId,
-      order.totalAmount,
-      customerId
-    );
-    
-    if (!validation.isValid) {
-      throw new BadRequestException(validation.message || 'Discount cannot be applied');
-    }
-
-    const applicableProducts = await this.getApplicableProducts(discountId, order.items);
-    const discountAmount = await this.calculateDiscountAmount(discount, order.totalAmount, applicableProducts);
-
-    const [updatedOrder] = await this.prisma.$transaction([
-      this.prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: order.totalAmount - discountAmount,
-          discountAmount,
-        },
-      }),
-      this.prisma.discount.update({
-        where: { id: discountId },
-        data: { currentUses: { increment: 1 } },
-      }),
-      this.prisma.discountApplication.create({
-        data: {
-          discountId,
-          orderId,
-          amount: discountAmount,
-          description: `Applied discount ${discount.title}`,
-        },
-      }),
-      ...(discount.code && customerId ? [
-        this.prisma.promoCode.updateMany({
-          where: { code: discount.code, customerId },
-          data: { used: true },
-        })
-      ] : [])
-    ]);
-
-    return { discountAmount, updatedOrder };
-  }
-
-  // ==================== Discount Discovery ====================
-
-  async findDiscountByCode(code: string): Promise<Discount> {
-    const discount = await this.prisma.discount.findFirst({
-      where: { code },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
+  private getDiscountIncludes() {
+    return {
+      restaurants: { 
+        include: { 
+          restaurant: true 
+        } 
       },
-    });
-
-    if (!discount) {
-      throw new NotFoundException(`Discount with code ${code} not found`);
-    }
-
-    return discount;
-  }
-
-  async findActiveDiscounts(): Promise<Discount[]> {
-    const now = new Date();
-    return this.prisma.discount.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { startDate: { lte: now }, endDate: null },
-          { startDate: { lte: now }, endDate: { gte: now } },
-          { startDate: null, endDate: { gte: now } },
-          { startDate: null, endDate: null }
-        ]
+      products: { 
+        include: { 
+          product: true 
+        } 
       },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
-    });
+    };
   }
 
   async findDiscountsByRestaurant(restaurantId: string): Promise<Discount[]> {
+    const restaurant = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException(`Restaurant with ID ${restaurantId} not found`);
+    }
+
     return this.prisma.discount.findMany({
       where: {
-        restaurants: { some: { restaurantId } },
-        isActive: true
-      },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
-    });
-  }
-
-  async findDiscountsForProducts(productIds: string[]): Promise<Discount[]> {
-    return this.prisma.discount.findMany({
-      where: {
-        OR: [
-          { targetType: 'ALL' },
-          {
-            targetType: 'PRODUCT',
-            products: { some: { productId: { in: productIds } } }
-          },
-          {
-            targetType: 'CATEGORY',
-            categories: {
-              some: {
-                category: { products: { some: { id: { in: productIds } } } }
-              }
-            }
-          }
-        ],
-        isActive: true
-      },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
-    });
-  }
-
-  async findDiscountsForCategories(categoryIds: string[]): Promise<Discount[]> {
-    return this.prisma.discount.findMany({
-      where: {
-        OR: [
-          { targetType: 'ALL' },
-          {
-            targetType: 'CATEGORY',
-            categories: { some: { categoryId: { in: categoryIds } } }
-          }
-        ],
-        isActive: true
-      },
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
-    });
-  }
-
-  async findDiscountsForOrderType(
-    orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-    restaurantId?: string
-  ): Promise<Discount[]> {
-    const now = new Date();
-    
-    const where: Prisma.DiscountWhereInput = {
-      isActive: true,
-      orderTypes: { has: orderType },
-      OR: [
-        { startDate: { lte: now }, endDate: { gte: now } },
-        { startDate: null, endDate: { gte: now } },
-        { startDate: { lte: now }, endDate: null },
-        { startDate: null, endDate: null }
-      ]
-    };
-
-    if (restaurantId) {
-      where.OR = [
-        { targetType: 'ALL' },
-        { 
-          targetType: 'RESTAURANT',
-          restaurants: { some: { restaurantId } }
-        }
-      ];
-    }
-
-    return this.prisma.discount.findMany({
-      where,
-      include: {
-        restaurants: { include: { restaurant: true } },
-        categories: { include: { category: true } },
-        products: { include: { product: true } },
-      },
-    });
-  }
-
-  async findDiscountsForCurrentOrder(
-    orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-    productIds: string[],
-    categoryIds: string[],
-    restaurantId?: string
-  ): Promise<Discount[]> {
-    const now = new Date();
-
-    const baseWhere: Prisma.DiscountWhereInput = {
-      isActive: true,
-      orderTypes: { has: orderType },
-      OR: [
-        { startDate: { lte: now }, endDate: { gte: now } },
-        { startDate: null, endDate: { gte: now } },
-        { startDate: { lte: now }, endDate: null },
-        { startDate: null, endDate: null }
-      ]
-    };
-
-    const [productDiscounts, categoryDiscounts, restaurantDiscounts, allDiscounts] = await Promise.all([
-      this.prisma.discount.findMany({
-        where: {
-          ...baseWhere,
-          OR: [
-            { targetType: 'PRODUCT', products: { some: { productId: { in: productIds } } } },
-            { 
-              targetType: 'CATEGORY', 
-              categories: { 
-                some: { 
-                  category: { 
-                    products: { 
-                      some: { id: { in: productIds } } 
-                    } 
-                  } 
-                } 
-              } 
-            }
-          ]
+        restaurants: {
+          some: { restaurantId }
         },
-        
-        include: {
-          restaurants: { include: { restaurant: true } },
-          categories: { include: { category: true } },
-          products: { include: { product: true } },
-        },
-      }),
-      this.prisma.discount.findMany({
-        where: {
-          ...baseWhere,
-          targetType: 'CATEGORY',
-          categories: { some: { categoryId: { in: categoryIds } }}
-        },
-        include: {
-          restaurants: { include: { restaurant: true } },
-          categories: { include: { category: true } },
-          products: { include: { product: true } },
-        },
-      }),
-      
-      restaurantId ? this.prisma.discount.findMany({
-        where: {
-          ...baseWhere,
-          targetType: 'RESTAURANT',
-          restaurants: { some: { restaurantId } }
-        },
-        include: {
-          restaurants: { include: { restaurant: true } },
-          categories: { include: { category: true } },
-          products: { include: { product: true } },
-        },
-      }) : Promise.resolve([]),
-      
-      this.prisma.discount.findMany({
-        where: {
-          ...baseWhere,
-          targetType: 'ALL'
-        },
-        include: {
-          restaurants: { include: { restaurant: true } },
-          categories: { include: { category: true } },
-          products: { include: { product: true } },
-        },
-      })
-    ]);
-
-    const allResults = [...productDiscounts, ...categoryDiscounts, ...restaurantDiscounts, ...allDiscounts];
-    const uniqueDiscounts = allResults.filter(
-      (discount, index, self) => index === self.findIndex(d => d.id === discount.id)
-    );
-
-    return uniqueDiscounts;
-  }
-
-  // ==================== Discount Validation ====================
-
-  async validateDiscount(
-    discountId: string,
-    amount?: number,
-    customerId?: string
-  ): Promise<{ isValid: boolean; message?: string }> {
-    const discount = await this.findDiscountById(discountId);
-    const now = DateTime.now();
-    
-    const validations = {
-      isActive: discount.isActive,
-      dateValid: (!discount.startDate || now >= DateTime.fromJSDate(discount.startDate)) && 
-                 (!discount.endDate || now <= DateTime.fromJSDate(discount.endDate)),
-      minAmountValid: !discount.minOrderAmount || 
-                     (amount && amount >= discount.minOrderAmount),
-      usesValid: !discount.maxUses || discount.currentUses < discount.maxUses,
-      dayValid: discount.daysOfWeek.length === 0 || 
-                discount.daysOfWeek.includes(this.mapLuxonWeekdayToDayOfWeek(now.weekday)),
-      promoValid: !discount.code || await this.validatePromoCode(discount.code, customerId)
-    };
-
-    const isValid = Object.values(validations).every(Boolean);
-    
-    let message: string | undefined;
-    if (!isValid) {
-      if (!validations.isActive) message = 'Discount is not active';
-      else if (!validations.dateValid) {
-        if (discount.startDate && now < DateTime.fromJSDate(discount.startDate)) {
-          message = 'Discount is not yet available';
-        } else {
-          message = 'Discount has expired';
-        }
-      }
-      else if (!validations.minAmountValid) {
-        message = `Minimum order amount is ${discount.minOrderAmount}`;
-      }
-      else if (!validations.usesValid) {
-        message = 'Discount limit reached';
-      }
-      else if (!validations.dayValid) {
-        message = 'Discount not valid for today';
-      }
-      else if (!validations.promoValid) {
-        message = 'Invalid or used promo code';
-      }
-    }
-
-    return { isValid, message };
-  }
-
-  private async validatePromoCode(code: string, customerId?: string): Promise<boolean> {
-    if (!customerId) return false;
-    
-    const promoCode = await this.prisma.promoCode.findFirst({
-      where: { code, customerId },
-    });
-
-    return !!promoCode && !promoCode.used;
-  }
-
-  async checkMinOrderAmount(discountId: string, amount: number): Promise<boolean> {
-    const discount = await this.prisma.discount.findUnique({
-      where: { id: discountId },
-      select: { minOrderAmount: true }
-    });
-
-    if (!discount) {
-      throw new NotFoundException(`Discount with ID ${discountId} not found`);
-    }
-
-    return !discount.minOrderAmount || amount >= discount.minOrderAmount;
-  }
-
-  // ==================== Promo Codes ====================
-
-  async generatePromoCode(discountId: string, customerId: string): Promise<string> {
-    const discount = await this.findDiscountById(discountId);
-    
-    if (!discount.code) {
-      throw new BadRequestException('This discount does not support promo codes');
-    }
-
-    const existingCode = await this.prisma.promoCode.findFirst({
-      where: { 
-        discountId,
-        customerId,
-        used: false
-      }
-    });
-
-    if (existingCode) {
-      return existingCode.code;
-    }
-
-    const code = `PROMO-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    await this.prisma.promoCode.create({
-      data: {
-        code,
-        customerId,
-        discountId,
+        isActive: true,
+        code: null, 
       },
-    });
-
-    return code;
-  }
-
-  async getCustomerPromoCodes(customerId: string): Promise<PromoCode[]> {
-    return this.prisma.promoCode.findMany({
-      where: { customerId },
-      include: { discount: true }
+      include: this.getDiscountIncludes(),
     });
   }
 
-  // ==================== Product-specific Discounts ====================
-
-  async getApplicableDiscountsForProduct(
-    productId: string,
-    orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-    restaurantId?: string
-  ): Promise<Discount[]> {
+  async findDiscountsByProduct(productId: string): Promise<Discount[]> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: { category: true },
     });
 
     if (!product) {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    return this.findDiscountsForCurrentOrder(
-      orderType,
-      [productId],
-      product.category ? [product.category.id] : [],
-      restaurantId
-    );
+    return this.prisma.discount.findMany({
+      where: {
+        products: {
+          some: { productId }
+        },
+        isActive: true,
+      },
+      include: this.getDiscountIncludes(),
+    });
   }
 
-  async getBestDiscountForOrder(
-    orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-    productIds: string[],
-    categoryIds: string[],
-    restaurantId?: string,
-    amount?: number
-  ): Promise<{ discount: Discount | null; amount: number }> {
-    const discounts = await this.findDiscountsForCurrentOrder(
-      orderType,
-      productIds,
-      categoryIds,
-      restaurantId
-    );
-
-    if (discounts.length === 0) {
-      return { discount: null, amount: 0 };
+  async findDiscountsByProducts(productIds: string[]): Promise<Discount[]> {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Product IDs array is empty');
     }
 
-    const applicableDiscounts = amount 
-      ? discounts.filter(d => !d.minOrderAmount || amount >= d.minOrderAmount)
-      : discounts;
-
-    if (applicableDiscounts.length === 0) {
-      return { discount: null, amount: 0 };
-    }
-
-    const sortedDiscounts = [...applicableDiscounts].sort((a, b) => {
-      if (a.type === 'FIXED' && b.type === 'FIXED') {
-        return b.value - a.value;
-      }
-      if (a.type === 'PERCENTAGE' && b.type === 'PERCENTAGE') {
-        return b.value - a.value;
-      }
-      return a.type === 'FIXED' ? -1 : 1;
+    // Проверяем существование продуктов
+    const productsCount = await this.prisma.product.count({
+      where: { id: { in: productIds } },
     });
 
-    const bestDiscount = sortedDiscounts[0];
-    const discountAmount = amount 
-      ? await this.calculateDiscountAmount(bestDiscount, amount, productIds)
-      : 0;
-
-    return { discount: bestDiscount, amount: discountAmount };
-  }
-
-  // ==================== Helper Methods ====================
-
-  private async calculateDiscountAmount(
-    discount: Discount,
-    orderAmount: number,
-    applicableProducts: string[]
-  ): Promise<number> {
-    if (discount.type === DiscountType.FIXED) {
-      return Math.min(discount.value, orderAmount);
+    if (productsCount !== productIds.length) {
+      throw new NotFoundException('Some products not found');
     }
 
-    let amountToDiscount = orderAmount;
-    
-    if (applicableProducts.length > 0) {
-      const productPrices = await this.prisma.product.findMany({
-        where: { id: { in: applicableProducts } },
-        select: { price: true },
-      });
-      
-      amountToDiscount = productPrices.reduce(
-        (sum, product) => sum + product.price,
-        0
+    return this.prisma.discount.findMany({
+      where: {
+        products: {
+          some: { productId: { in: productIds } }
+        },
+        isActive: true,
+      },
+      include: this.getDiscountIncludes(),
+    });
+  }
+  
+  async findDiscountByPromoCode(code: string): Promise<Discount> {
+    const discount = await this.prisma.discount.findFirst({
+      where: { 
+        code,
+        isActive: true,
+        // Проверяем даты действия
+        AND: [
+          { OR: [{ startDate: null }, { startDate: { lte: new Date() } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: new Date() } }] }
+        ]
+      },
+      include: this.getDiscountIncludes(),
+    });
+
+    if (!discount) {
+      throw new NotFoundException(`Active discount with code ${code} not found`);
+    }
+
+    return discount;
+  }
+  async validateDiscount(discountId: string, restaurantId: string, currentAmount: number): Promise<Discount> {
+  const discount = await this.prisma.discount.findUnique({
+    where: { id: discountId },
+    include: {
+      restaurants: { where: { restaurantId } }
+    }
+  });
+
+  if (!discount) {
+    throw new NotFoundException('Скидка не найдена');
+  }
+
+  if (!discount.isActive) {
+    throw new BadRequestException('Скидка не активна');
+  }
+
+  // Проверка доступности для ресторана
+  if (discount.restaurants.length === 0 && discount.targetType !== 'ALL') {
+    throw new BadRequestException('Скидка не доступна для этого ресторана');
+  }
+
+  // Проверка минимальной суммы
+  if (discount.minOrderAmount && currentAmount < discount.minOrderAmount) {
+    throw new BadRequestException(
+      `Минимальная сумма заказа для скидки: ${discount.minOrderAmount}`
+    );
+  }
+
+  // Проверка дат действия
+  const now = new Date();
+  if (discount.startDate && new Date(discount.startDate) > now) {
+    throw new BadRequestException('Скидка еще не началась');
+  }
+
+  if (discount.endDate && new Date(discount.endDate) < now) {
+    throw new BadRequestException('Скидка уже закончилась');
+  }
+
+  // Проверка времени суток
+  if (discount.startTime !== null && discount.endTime !== null) {
+    const currentHour = now.getHours();
+    if (currentHour < discount.startTime || currentHour >= discount.endTime) {
+      throw new BadRequestException(
+        `Скидка доступна с ${discount.startTime}:00 до ${discount.endTime}:00`
       );
     }
-
-    const discountAmount = (amountToDiscount * discount.value) / 100;
-    
-    
-    return discountAmount;
   }
 
-  private async getApplicableProducts(discountId: string, orderItems: { productId: string }[]): Promise<string[]> {
-    const productDiscounts = await this.prisma.productDiscount.findMany({
-      where: { discountId },
-    });
-
-    if (productDiscounts.length === 0) return [];
-
-    return orderItems
-      .map(item => item.productId)
-      .filter(productId => productDiscounts.some(pd => pd.productId === productId));
+  // Проверка лимита использований
+  if (discount.maxUses && discount.currentUses >= discount.maxUses) {
+    throw new BadRequestException('Лимит использований скидки исчерпан');
   }
 
-  private mapDayNumberToDayOfWeek(dayNumber: number): DayOfWeek {
-    const days = [
-      DayOfWeek.SUNDAY,    // 0
-      DayOfWeek.MONDAY,    // 1
-      DayOfWeek.TUESDAY,   // 2
-      DayOfWeek.WEDNESDAY, // 3
-      DayOfWeek.THURSDAY,  // 4
-      DayOfWeek.FRIDAY,    // 5
-      DayOfWeek.SATURDAY   // 6
-    ];
-    return days[dayNumber];
-  }
+  return discount;
+}
 
-  private mapLuxonWeekdayToDayOfWeek(luxonWeekday: number): DayOfWeek {
-    switch(luxonWeekday) {
-      case 1: return DayOfWeek.MONDAY;
-      case 2: return DayOfWeek.TUESDAY;
-      case 3: return DayOfWeek.WEDNESDAY;
-      case 4: return DayOfWeek.THURSDAY;
-      case 5: return DayOfWeek.FRIDAY;
-      case 6: return DayOfWeek.SATURDAY;
-      case 7: return DayOfWeek.SUNDAY;
-      default: throw new Error('Invalid weekday number');
+async calculateDiscountAmount(
+    discount: Discount,
+    orderItems: Array<{
+      productId: string;
+      price: number;
+      quantity: number;
+      isRefund: boolean;
+    }>
+  ): Promise<{ amount: number; description: string }> {
+    let discountAmount = 0;
+    let description = '';
+
+    if (discount.targetType === DiscountTargetType.PRODUCT) {
+      // Получаем продукты, на которые действует скидка
+      const productDiscounts = await this.prisma.productDiscount.findMany({
+        where: { discountId: discount.id },
+        include: { product: true }
+      });
+
+      const productIds = productDiscounts.map(pd => pd.productId);
+      const applicableItems = orderItems.filter(
+        item => productIds.includes(item.productId) && !item.isRefund
+      );
+
+      for (const item of applicableItems) {
+        const itemDiscount = discount.type === 'PERCENTAGE'
+          ? Math.floor((item.price * item.quantity * discount.value) / 100)
+          : discount.value * item.quantity;
+
+        discountAmount += itemDiscount;
+      }
+
+      description = `Скидка "${discount.title}" применена к ${applicableItems.length} позициям`;
+    } else {
+      // Скидка на весь заказ
+      const subtotal = orderItems
+        .filter(item => !item.isRefund)
+        .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+      discountAmount = discount.type === 'PERCENTAGE'
+        ? Math.floor((subtotal * discount.value) / 100)
+        : discount.value;
+
+      description = `Скидка "${discount.title}" применена ко всему заказу`;
     }
+
+    if (discountAmount <= 0) {
+      throw new BadRequestException('Сумма скидки должна быть больше 0');
+    }
+
+    return { amount: discountAmount, description };
   }
+
+
 }

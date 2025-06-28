@@ -6,203 +6,139 @@ import {
   Param,
   Put,
   Delete,
-  ParseUUIDPipe,
-  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { DiscountsService } from './discounts.service';
-import { CreateDiscountDto } from './dto/create-discount.dto';
-import { UpdateDiscountDto } from './dto/update-discount.dto';
-import { DiscountResponseDto } from './dto/discount-response.dto';
+import {
+  CreateDiscountDto,
+  UpdateDiscountDto,
+  DiscountResponseDto,
+  ProductDiscountsDto,
+} from './dto/index'
+import { Discount } from '@prisma/client';
 
 @ApiTags('Discounts')
+@ApiBearerAuth()
 @Controller('discounts')
 export class DiscountsController {
   constructor(private readonly discountsService: DiscountsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new discount' })
-  @ApiResponse({ status: 201, description: 'Discount created', type: DiscountResponseDto })
-  create(@Body() createDiscountDto: CreateDiscountDto) {
-    if (typeof createDiscountDto.value === 'string') {
-      createDiscountDto.value = Number(createDiscountDto.value);
-    }
-    return this.discountsService.createDiscount(createDiscountDto);
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Discount created successfully', 
+    type: DiscountResponseDto 
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  async createDiscount(@Body() dto: CreateDiscountDto): Promise<Discount> {
+    return this.discountsService.createDiscount(dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all discounts' })
-  @ApiResponse({ status: 200, description: 'List of discounts', type: [DiscountResponseDto] })
-  findAll() {
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of discounts', 
+    type: [DiscountResponseDto] 
+  })
+  async getAllDiscounts(): Promise<Discount[]> {
     return this.discountsService.findAllDiscounts();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get discount by ID' })
-  @ApiResponse({ status: 200, description: 'Discount details', type: DiscountResponseDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Discount details', 
+    type: DiscountResponseDto 
+  })
   @ApiResponse({ status: 404, description: 'Discount not found' })
-  findOne(@Param('id') id: string) {
+  async getDiscountById(@Param('id') id: string): Promise<Discount> {
     return this.discountsService.findDiscountById(id);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update discount' })
-  @ApiResponse({ status: 200, description: 'Updated discount', type: DiscountResponseDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Updated discount', 
+    type: DiscountResponseDto 
+  })
   @ApiResponse({ status: 404, description: 'Discount not found' })
-  update(
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  async updateDiscount(
     @Param('id') id: string,
-    @Body() updateDiscountDto: UpdateDiscountDto,
-  ) {
-    return this.discountsService.updateDiscount(id, updateDiscountDto);
+    @Body() dto: UpdateDiscountDto,
+  ): Promise<Discount> {
+    return this.discountsService.updateDiscount(id, dto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete discount' })
-  @ApiResponse({ status: 200, description: 'Discount deleted', type: DiscountResponseDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Discount deleted', 
+    type: DiscountResponseDto 
+  })
   @ApiResponse({ status: 404, description: 'Discount not found' })
-  remove(@Param('id') id: string) {
+  async deleteDiscount(@Param('id') id: string): Promise<Discount> {
     return this.discountsService.deleteDiscount(id);
   }
 
-  @Post(':id/apply/:orderId')
-  @ApiOperation({ summary: 'Apply discount to order' })
-  @ApiResponse({ status: 200, description: 'Discount applied to order' })
-  @ApiResponse({ status: 404, description: 'Discount or order not found' })
-  applyDiscount(
-    @Param('id') discountId: string,
-    @Param('orderId') orderId: string,
-  ) {
-    return this.discountsService.applyDiscountToOrder(orderId, discountId);
-  }
-
-  @Get('code/:code')
-  @ApiOperation({ summary: 'Get discount by code' })
-  @ApiResponse({ status: 200, description: 'Discount details', type: DiscountResponseDto })
-  @ApiResponse({ status: 404, description: 'Discount not found' })
-  findByCode(@Param('code') code: string) {
-    return this.discountsService.findDiscountByCode(code);
-  }
-
-   @Get('active')
-  @ApiOperation({ summary: 'Get all active discounts' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of active discounts', 
-    type: [DiscountResponseDto] 
-  })
-  findActive() {
-    return this.discountsService.findActiveDiscounts();
-  }
-
+  
   @Get('restaurant/:restaurantId')
-  @ApiOperation({ summary: 'Get discounts by restaurant' })
+  @ApiOperation({ summary: 'Get discounts by restaurant ID' })
   @ApiResponse({ 
     status: 200, 
-    description: 'List of discounts for restaurant',
+    description: 'List of discounts for restaurant', 
     type: [DiscountResponseDto] 
   })
-  findByRestaurant(@Param('restaurantId') restaurantId: string) {
+  async getDiscountsByRestaurant(
+    @Param('restaurantId') restaurantId: string
+  ): Promise<Discount[]> {
     return this.discountsService.findDiscountsByRestaurant(restaurantId);
   }
 
-  @Post('for-products')
-  @ApiOperation({ summary: 'Get discounts for specific products' })
+  @Get('product/:productId')
+  @ApiOperation({ summary: 'Get discounts by product ID' })
   @ApiResponse({ 
     status: 200, 
-    description: 'List of applicable discounts',
+    description: 'List of discounts for product', 
     type: [DiscountResponseDto] 
   })
-  findForProducts(@Body() body: { productIds: string[] }) {
-    return this.discountsService.findDiscountsForProducts(body.productIds);
+  async getDiscountsByProduct(
+    @Param('productId') productId: string
+  ): Promise<Discount[]> {
+    return this.discountsService.findDiscountsByProduct(productId);
   }
 
-  @Post('for-categories')
-  @ApiOperation({ summary: 'Get discounts for specific categories' })
+  @Post('products')
+  @ApiOperation({ summary: 'Get discounts for multiple products' })
   @ApiResponse({ 
     status: 200, 
-    description: 'List of applicable discounts',
+    description: 'List of discounts for products', 
     type: [DiscountResponseDto] 
   })
-  findForCategories(@Body() body: { categoryIds: string[] }) {
-    return this.discountsService.findDiscountsForCategories(body.categoryIds);
+  async getDiscountsByProducts(
+    @Body() dto: ProductDiscountsDto
+  ): Promise<Discount[]> {
+    return this.discountsService.findDiscountsByProducts(dto.productIds);
   }
+  
 
-  @Get(':id/check-min-amount')
-  @ApiOperation({ summary: 'Check if order amount meets discount minimum' })
+  @Get('promo/:code')
+  @ApiOperation({ summary: 'Get discount by promo code' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Validation result',
-    schema: { type: 'object', properties: { isValid: { type: 'boolean' } } }
+    description: 'Discount details', 
+    type: DiscountResponseDto 
   })
-  async checkMinAmount(
-    @Param('id') discountId: string,
-    @Query('amount') amount: number
-  ) {
-    const isValid = await this.discountsService.checkMinOrderAmount(discountId, amount);
-    return { isValid };
-  }
-
-  @Post(':id/generate-code')
-  @ApiOperation({ summary: 'Generate promo code for customer' })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'Generated promo code',
-    schema: { type: 'object', properties: { code: { type: 'string' } } }
-  })
-  async generatePromoCode(
-    @Param('id') discountId: string,
-    @Body() body: { customerId: string }
-  ) {
-    const code = await this.discountsService.generatePromoCode(discountId, body.customerId);
-    return { code };
-  }
-
-  @Get('customer/:customerId/promocodes')
-  @ApiOperation({ summary: 'Get customer promo codes' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of customer promo codes',
-    type: [DiscountResponseDto] 
-  })
-  getCustomerPromoCodes(@Param('customerId') customerId: string) {
-    return this.discountsService.getCustomerPromoCodes(customerId);
-  }
-
-  @Get('for-order-type/:orderType')
-  @ApiOperation({ summary: 'Get discounts for specific order type' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of applicable discounts for order type',
-    type: [DiscountResponseDto] 
-  })
-  findForOrderType(
-    @Param('orderType') orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-    @Query('restaurantId') restaurantId?: string
-  ) {
-    return this.discountsService.findDiscountsForOrderType(orderType, restaurantId);
-  }
-
-  @Post('for-current-order')
-  @ApiOperation({ summary: 'Get discounts applicable to current order' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'List of applicable discounts for current order',
-    type: [DiscountResponseDto] 
-  })
-  findForCurrentOrder(
-    @Body() body: {
-      orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'BANQUET',
-      productIds: string[],
-      categoryIds: string[],
-      restaurantId?: string
-    }
-  ) {
-    return this.discountsService.findDiscountsForCurrentOrder(
-      body.orderType,
-      body.productIds,
-      body.categoryIds,
-      body.restaurantId
-    );
+  @ApiResponse({ status: 404, description: 'Discount not found' })
+  async getDiscountByPromoCode(
+    @Param('code') code: string
+  ): Promise<Discount> {
+    return this.discountsService.findDiscountByPromoCode(code);
   }
 
 }

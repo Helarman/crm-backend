@@ -262,4 +262,112 @@ export class OrderController {
   ): Promise<OrderResponse> {
     return this.orderService.refundOrderItem(orderId, itemId, body.reason);
   }
+
+  @Patch(':id/customer')
+  @ApiOperation({ summary: 'Привязать клиента к заказу' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Клиент привязан к заказу', 
+    type: OrderResponse 
+  })
+  async applyCustomerToOrder(
+    @Param('id') id: string,
+    @Body() body: { customerId: string }
+  ): Promise<OrderResponse> {
+    return this.orderService.applyCustomerToOrder(id, body.customerId);
+  }
+
+  @Post(':id/apply-discount')
+  @ApiOperation({ summary: 'Применить скидку клиента к заказу' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Скидка применена', 
+    type: OrderResponse 
+  })
+  async applyCustomerDiscount(
+    @Param('id') id: string,
+    @Body() body: { discountId: string }
+  ): Promise<OrderResponse> {
+    return this.orderService.applyCustomerDiscount(id, body.discountId);
+  }
+
+  @Post(':id/apply-customer-discount')
+  @ApiOperation({ summary: 'Применить персональную скидку клиента' })
+  async applyCustomerPersonalDiscount(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.applyCustomerPersonalDiscount(id);
+  }
+  
+
+  @Post(':id/apply-points')
+  @ApiOperation({ summary: 'Применить бонусные баллы клиента к заказу' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Бонусные баллы применены', 
+    type: OrderResponse 
+  })
+  async applyCustomerPoints(
+    @Param('id') id: string,
+    @Body() body: { points: number }
+  ): Promise<OrderResponse> {
+    return this.orderService.applyCustomerPoints(id, body.points);
+  }
+
+  @Delete(':id/remove-points')
+  @ApiOperation({ summary: 'Удалить бонусные баллы из заказа' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Бонусные баллы удалены', 
+    type: OrderResponse 
+  })
+  async removeCustomerPoints(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeCustomerPoints(id);
+  }
+
+  @Delete(':id/customer')
+  @ApiOperation({ summary: 'Отвязать клиента от заказа' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Клиент отвязан от заказа', 
+    type: OrderResponse 
+  })
+  async removeCustomerFromOrder(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeCustomerFromOrder(id);
+  }
+
+  @Delete(':id/discount')
+  @ApiOperation({ summary: 'Удалить скидку из заказа' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Скидка удалена', 
+    type: OrderResponse 
+  })
+  async removeCustomerDiscount(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeCustomerDiscount(id);
+  }
+
+  @Post('apply-to-order/:orderId/:discountId')
+  @ApiOperation({ summary: 'Применить скидку к заказу' })
+  async applyDiscountToOrder(
+    @Param('orderId') orderId: string,
+     @Param('discountId') discountId: string,
+  ): Promise<OrderResponse> {
+    return this.orderService.applyDiscountToOrder(orderId, discountId);
+  }
+
+  @Delete('remove-from-order/:orderId')
+  @ApiOperation({ summary: 'Удалить скидку из заказа' })
+  async removeDiscountFromOrder(
+    @Param('orderId') orderId: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeDiscountFromOrder(orderId);
+  }
+
 }

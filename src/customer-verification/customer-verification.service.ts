@@ -148,6 +148,7 @@ export class CustomerVerificationService {
           bonusPoints: true,
           createdAt: true,
           lastLogin: true,
+          personalDiscount: true,
         },
         orderBy: {
           createdAt: 'desc',
@@ -208,4 +209,76 @@ export class CustomerVerificationService {
       }
     });
   }
+
+  private generateShortCode(): string {
+    const digits = '0123456789';
+    let result = '';
+    for (let i = 0; i < 4; i++) {
+      result += digits.charAt(Math.floor(Math.random() * digits.length));
+    }
+    return result;
+  }
+
+async generateNewShortCode(customerId: string) {
+  const shortCode = this.generateShortCode();
+  const shortCodeExpires = new Date(Date.now() + 2 * 60 * 1000); // 2 минуты
+
+  const customer = await this.prisma.customer.update({
+    where: { id: customerId },
+    data: { 
+      shortCode,
+      shortCodeExpires
+    },
+    select: {
+      id: true,
+      shortCode: true,
+      shortCodeExpires: true
+    }
+  });
+
+  return customer;
+}
+
+async getCustomerByShortCode(shortCode: string) {
+  const customer = await this.prisma.customer.findFirst({
+    where: { 
+      shortCode,
+      shortCodeExpires: { gt: new Date() }
+    },
+    select: {
+      id: true,
+      phone: true,
+      bonusPoints: true,
+      personalDiscount: true,
+      createdAt: true,
+      lastLogin: true,
+    }
+  });
+
+  if (!customer) {
+    throw new NotFoundException('Код не найден или истек');
+  }
+
+  return customer;
+}
+
+async updatePersonalDiscount(customerId: string, discount: number) {
+  if (discount < 0 || discount > 100) {
+    throw new BadRequestException('Скидка должна быть в диапазоне от 0 до 100');
+  }
+
+  return this.prisma.customer.update({
+    where: { id: customerId },
+    data: { personalDiscount: discount },
+    select: {
+      id: true,
+      phone: true,
+      bonusPoints: true,
+      personalDiscount: true,
+      createdAt: true,
+      lastLogin: true
+    }
+  });
+}
+
 }

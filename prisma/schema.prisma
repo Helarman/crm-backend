@@ -182,7 +182,6 @@ model Category {
   description String
 
   products Product[] @relation("ProductToCategory")
-  discounts CategoryDiscount[]
 
   @@map("category")
 }
@@ -229,9 +228,9 @@ model ShiftIncome {
   shift       Shift    @relation(fields: [shiftId], references: [id])
   shiftId     String   @map("shift_id")
 
-  title       String   // Название дохода
-  amount      Float    // Сумма дохода
-  description String?  // Описание (необязательное)
+  title       String  
+  amount      Float 
+  description String?  
 
   @@map("shift_incomes")
 }
@@ -248,18 +247,21 @@ model UserShift {
 }
 
 model Customer {
-  id          String   @id @default(uuid())
-  phone       String   @unique
-  code        String?
-  codeExpires DateTime?
-  lastLogin   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  orders      Order[]  @relation("OrderToCustomer")
-  bonusPoints Float    @default(0) @map("bonus_points")
+  id               String        @id @default(uuid())
+  phone            String        @unique
+  code             String?
+  codeExpires      DateTime?
+  shortCode        String?       @map("short_code")
+  shortCodeExpires DateTime?     @map("short_code_expires")
+  lastLogin        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  orders           Order[]       @relation("OrderToCustomer")
+  bonusPoints      Float         @default(0) @map("bonus_points")
+  personalDiscount Float         @default(0) @map("personal_discount")
   bonusTransactions BonusTransaction[]
   discountApplications DiscountApplication[]
-  promocodes PromoCode[]
+  promocodes       PromoCode[]
 
   @@map("customer")
 }
@@ -581,30 +583,28 @@ model Discount {
   type        DiscountType
   value       Float       
   
-  targetType  DiscountTargetType
+  targetType  DiscountTargetType @default(ALL)
   minOrderAmount Float?   @map("min_order_amount")
   
   startDate   DateTime?   @map("start_date")
   endDate     DateTime?   @map("end_date")
-  daysOfWeek  DayOfWeek[]
+  startTime   Int?        @map("start_time") // Час начала действия (0-23)
+  endTime     Int?        @map("end_time")   // Час окончания действия (0-23)
   
   isActive    Boolean     @default(true)
-  code        String?    
+  code        String?     // Базовый промо-код (если есть)
   maxUses     Int?        @map("max_uses") 
   currentUses Int         @default(0) @map("current_uses") 
   
   restaurants RestaurantDiscount[]
-  categories  CategoryDiscount[]
   products    ProductDiscount[]
   
-  orderTypes  EnumOrderType[]
-  
   applications DiscountApplication[]
-  
-  promocodes PromoCode[]
+  promocodes   PromoCode[]
 
   @@map("discounts")
 }
+
 
 model RestaurantDiscount {
   discountId    String     @map("discount_id")
@@ -614,17 +614,6 @@ model RestaurantDiscount {
 
   @@id([discountId, restaurantId])
   @@map("restaurant_discount")
-}
-
-model CategoryDiscount {
-
-  discountId    String    @map("discount_id")
-  categoryId    String    @map("category_id")
-  discount      Discount  @relation(fields: [discountId], references: [id])
-  category      Category  @relation(fields: [categoryId], references: [id])
-  
-  @@id([discountId, categoryId])
-  @@map("category_discount")
 }
 
 model ProductDiscount {
@@ -814,8 +803,6 @@ enum DiscountType {
 
 enum DiscountTargetType {
   ALL
-  RESTAURANT
-  CATEGORY
   PRODUCT
 }
 
