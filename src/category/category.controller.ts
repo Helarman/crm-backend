@@ -29,13 +29,11 @@ import {
 	  return this.categoryService.getById(id);
 	}
   
-	@ApiBearerAuth()
 	@ApiOperation({ summary: 'Создать новую категорию' })
 	@ApiBody({ type: CategoryDto, description: 'Данные для создания категории' })
 	@ApiResponse({ status: 200, description: 'Категория успешно создана' })
 	@ApiResponse({ status: 400, description: 'Некорректные данные' })
 	@ApiResponse({ status: 401, description: 'Не авторизован' })
-	@Auth()
 	@Post()
 	@HttpCode(200)
 	@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -51,7 +49,6 @@ import {
 	@ApiResponse({ status: 404, description: 'Категория не найдена' })
 	@UsePipes(new ValidationPipe())
 	@HttpCode(200)
-	@Auth()
 	@Put(':id')
 	async update(@Param('id') id: string, @Body() dto: CategoryDto) {
 	  return this.categoryService.update(id, dto);
@@ -63,7 +60,6 @@ import {
 	@ApiResponse({ status: 200, description: 'Категория успешно удалена' })
 	@ApiResponse({ status: 404, description: 'Категория не найдена' })
 	@HttpCode(200)
-	@Auth()
 	@Delete(':id')
 	async delete(@Param('id') id: string) {
 	  return this.categoryService.delete(id);
