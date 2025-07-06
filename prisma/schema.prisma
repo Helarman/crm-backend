@@ -490,6 +490,10 @@ model InventoryItem {
   
   inventoryTransactions InventoryTransaction[]
   ingredients ProductIngredient[]
+  premixIgredients PremixIngredient[]
+  
+  premix Premix? @relation(fields: [premixId], references: [id])
+  premixId String? @map("premix_id") @unique
   @@map("inventory_items")
 }
 
@@ -502,6 +506,36 @@ model ProductIngredient {
   
   @@id([productId, inventoryItemId])
   @@map("product_ingredient")
+}
+
+
+model Premix {
+  id          String      @id @default(cuid())
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  name        String      @unique
+  description String?
+  unit        String      // Единица измерения заготовки
+  yield       Float       @default(1) // Выход (сколько получается заготовки из ингредиентов)
+  
+  ingredients PremixIngredient[]
+  inventoryItem InventoryItem?
+  
+  @@map("premixes")
+}
+
+model PremixIngredient {
+  premixId    String    @map("premix_id")
+  inventoryItemId String @map("inventory_item_id")
+  
+  premix      Premix    @relation(fields: [premixId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  
+  quantity    Float     // Количество ингредиента на единицу заготовки
+  
+  @@id([premixId, inventoryItemId])
+  @@map("premix_ingredients")
 }
 
 model InventoryTransaction {

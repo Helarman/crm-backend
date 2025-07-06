@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiOkResponse } from '@nestjs/swagger';
 
@@ -166,4 +166,64 @@ export class WarehouseController {
   async getInventoryItemTransactions(@Param('id') id: string) {
     return this.warehouseService.getInventoryItemTransactions(id);
   }
+  
+  @Get('transactions/restaurant/:id')
+  @ApiOperation({ summary: 'Получить транзакции склада ресторана по периоду дат' })
+  @ApiResponse({ status: 200, description: 'Транзакции найдены' })
+  async getWarehouseTransactionsByPeriod(
+    @Param('id') restaurantId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.warehouseService.getWarehouseTransactionsByPeriod(restaurantId, startDate, endDate);
+  }
+  
+  @Post('premixes')
+  @ApiOperation({ summary: 'Создать новую заготовку' })
+  @ApiResponse({ status: 201, description: 'Заготовка создана' })
+  async createPremix(
+    @Body()
+    data: {
+      name: string;
+      description?: string;
+      unit: string;
+      yield?: number;
+      ingredients: Array<{
+        inventoryItemId: string;
+        quantity: number;
+      }>;
+      warehouseId: string;
+    },
+  ) {
+    return this.warehouseService.createPremix(data);
+  }
+
+  @Post('premixes/:id/prepare')
+  @ApiOperation({ summary: 'Приготовить заготовку' })
+  @ApiResponse({ status: 201, description: 'Заготовка приготовлена' })
+  async preparePremix(
+    @Param('id') premixId: string,
+    @Body() data: { quantity: number; userId?: string },
+  ) {
+    return this.warehouseService.preparePremix(
+      premixId,
+      data.quantity,
+      data.userId,
+    );
+  }
+
+  @Get('premixes/:id')
+  @ApiOperation({ summary: 'Получить детали заготовки' })
+  @ApiResponse({ status: 200, description: 'Детали заготовки' })
+  async getPremixDetails(@Param('id') premixId: string) {
+    return this.warehouseService.getPremixDetails(premixId);
+  }
+
+  @Get('premixes')
+  @ApiOperation({ summary: 'Получить список заготовок' })
+  @ApiResponse({ status: 200, description: 'Список заготовок' })
+  async listPremixes(@Query('warehouseId') warehouseId?: string) {
+    return this.warehouseService.listPremixes(warehouseId);
+  }
+
 }
