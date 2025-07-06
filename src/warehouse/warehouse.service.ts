@@ -37,6 +37,7 @@ export class WarehouseService {
         storageLocations: true,
         inventoryItems: {
           include: {
+            premix: true,
             storageLocation: true,
             product: true,
           },
@@ -559,7 +560,7 @@ export class WarehouseService {
         },
       });
 
-      
+
       // 2. Затем создаём заготовку, используя правильный синтаксис связи
       const premix = await prisma.premix.create({
         data: {
@@ -723,6 +724,181 @@ export class WarehouseService {
         },
         inventoryItem: true,
       },
+    });
+  }
+
+  async getPremixIngredients(premixId: string) {
+    const premix = await this.prisma.premix.findUnique({
+      where: { id: premixId },
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                inventoryTransactions: {
+                  orderBy: {
+                    createdAt: 'desc',
+                  },
+                  take: 5,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!premix) {
+      throw new Error('Заготовка не найдена');
+    }
+
+    return premix.ingredients.map(ingredient => ({
+      premixId: ingredient.premixId,
+      inventoryItemId: ingredient.inventoryItemId,
+      quantity: ingredient.quantity,
+      inventoryItem: {
+        id: ingredient.inventoryItem.id,
+        name: ingredient.inventoryItem.name,
+        description: ingredient.inventoryItem.description,
+        unit: ingredient.inventoryItem.unit,
+        quantity: ingredient.inventoryItem.quantity,
+        lastTransactions: ingredient.inventoryItem.inventoryTransactions,
+      },
+    }));
+  }
+
+  async addPremixIngredient(
+    premixId: string,
+    data: { inventoryItemId: string; quantity: number },
+  ) {
+    // Проверяем, что ингредиент не дублируется
+    const existing = await this.prisma.premixIngredient.findFirst({
+      where: {
+        premixId,
+        inventoryItemId: data.inventoryItemId,
+      },
+    });
+
+    if (existing) {
+      throw new Error('Этот ингредиент уже добавлен в заготовку');
+    }
+
+    return this.prisma.premixIngredient.create({
+      data: {
+        quantity: data.quantity,
+        premix: { connect: { id: premixId } },
+        inventoryItem: { connect: { id: data.inventoryItemId } },
+      },
+      include: {
+        inventoryItem: true,
+      },
+    });
+  }
+
+  async updatePremixIngredient(
+    premixId: string,
+    ingredientId: string,
+    data: { quantity?: number },
+  ) {
+    return this.prisma.premixIngredient.update({
+      where: {
+        premixId_inventoryItemId: {
+          premixId: premixId,
+          inventoryItemId: ingredientId
+        }
+      },
+      data: {
+        quantity: data.quantity,
+      },
+      include: {
+        inventoryItem: true,
+      },
+    });
+  }
+
+  async removePremixIngredient(premixId: string, ingredientId: string) {
+    const ingredient = await this.prisma.premixIngredient.findFirst({
+      where: {
+        premixId: premixId,
+        inventoryItemId: ingredientId,
+      },
+    });
+
+    if (!ingredient) {
+      throw new Error('Ингредиент не найден в указанной заготовке');
+    }
+
+    return this.prisma.premixIngredient.delete({
+      where: {
+        premixId_inventoryItemId: {
+          premixId: premixId,
+          inventoryItemId: ingredientId
+        }
+      },
+    });
+  }
+  async getPremixTransactions(premixId: string) {
+    const premix = await this.prisma.premix.findUnique({
+      where: { id: premixId },
+      include: {
+        inventoryItem: {
+          select: { id: true }
+        }
+      },
+    });
+
+    if (!premix || !premix.inventoryItem) {
+      throw new Error('Заготовка или связанная инвентарная позиция не найдена');
+    }
+
+    return this.prisma.inventoryTransaction.findMany({
+      where: { inventoryItemId: premix.inventoryItem.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+  async updatePremix(
+    premixId: string,
+    data: {
+      name?: string;
+      description?: string;
+      unit?: string;
+      yield?: number;
+    },
+  ) {
+    return this.prisma.$transaction(async (prisma) => {
+      // Обновляем саму заготовку
+      const updatedPremix = await prisma.premix.update({
+        where: { id: premixId },
+        data: {
+          name: data.name,
+          description: data.description,
+          unit: data.unit,
+          yield: data.yield,
+        },
+      });
+
+      // Если есть связанная инвентарная позиция - обновляем и её
+      if (data.name || data.description || data.unit) {
+        await prisma.inventoryItem.update({
+          where: { premixId: premixId },
+          data: {
+            name: data.name,
+            description: data.description,
+            unit: data.unit,
+          },
+        });
+      }
+
+      return updatedPremix;
     });
   }
 

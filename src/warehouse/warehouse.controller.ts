@@ -5,11 +5,11 @@ import { ApiTags, ApiOperation, ApiResponse, ApiOkResponse } from '@nestjs/swagg
 @ApiTags('Warehouse')
 @Controller('warehouse')
 export class WarehouseController {
-  constructor(private readonly warehouseService: WarehouseService) {}
+  constructor(private readonly warehouseService: WarehouseService) { }
 
   @Get('items')
   @ApiOperation({ summary: 'Получить все позиции склада' })
-  @ApiOkResponse({ description: 'Список позиций склада'})
+  @ApiOkResponse({ description: 'Список позиций склада' })
   async getAllInventoryItems() {
     return this.warehouseService.getAllInventoryItems();
   }
@@ -166,7 +166,7 @@ export class WarehouseController {
   async getInventoryItemTransactions(@Param('id') id: string) {
     return this.warehouseService.getInventoryItemTransactions(id);
   }
-  
+
   @Get('transactions/restaurant/:id')
   @ApiOperation({ summary: 'Получить транзакции склада ресторана по периоду дат' })
   @ApiResponse({ status: 200, description: 'Транзакции найдены' })
@@ -177,7 +177,7 @@ export class WarehouseController {
   ) {
     return this.warehouseService.getWarehouseTransactionsByPeriod(restaurantId, startDate, endDate);
   }
-  
+
   @Post('premixes')
   @ApiOperation({ summary: 'Создать новую заготовку' })
   @ApiResponse({ status: 201, description: 'Заготовка создана' })
@@ -224,6 +224,67 @@ export class WarehouseController {
   @ApiResponse({ status: 200, description: 'Список заготовок' })
   async listPremixes(@Query('warehouseId') warehouseId?: string) {
     return this.warehouseService.listPremixes(warehouseId);
+  }
+
+
+  @Get('premixes/:id/ingredients')
+  @ApiOperation({ summary: 'Получить ингредиенты заготовки' })
+  @ApiResponse({ status: 200, description: 'Список ингредиентов заготовки' })
+  async getPremixIngredients(@Param('id') premixId: string) {
+    return this.warehouseService.getPremixIngredients(premixId);
+  }
+
+  @Post('premixes/:id/ingredients')
+  @ApiOperation({ summary: 'Добавить ингредиент в заготовку' })
+  @ApiResponse({ status: 201, description: 'Ингредиент добавлен' })
+  async addPremixIngredient(
+    @Param('id') premixId: string,
+    @Body() data: { inventoryItemId: string; quantity: number },
+  ) {
+    return this.warehouseService.addPremixIngredient(premixId, data);
+  }
+
+  @Put('premixes/:id/ingredients/:ingredientId')
+  @ApiOperation({ summary: 'Обновить ингредиент в заготовке' })
+  @ApiResponse({ status: 200, description: 'Ингредиент обновлен' })
+  async updatePremixIngredient(
+    @Param('id') premixId: string,
+    @Param('ingredientId') ingredientId: string,
+    @Body() data: { quantity?: number },
+  ) {
+    return this.warehouseService.updatePremixIngredient(premixId, ingredientId, data);
+  }
+
+  @Delete('premixes/:id/ingredients/:ingredientId')
+  @ApiOperation({ summary: 'Удалить ингредиент из заготовки' })
+  @ApiResponse({ status: 200, description: 'Ингредиент удален' })
+  async removePremixIngredient(
+    @Param('id') premixId: string,
+    @Param('ingredientId') ingredientId: string,
+  ) {
+    return this.warehouseService.removePremixIngredient(premixId, ingredientId);
+  }
+
+  @Get('premixes/:id/transactions')
+  @ApiOperation({ summary: 'Получить транзакции по заготовке' })
+  @ApiResponse({ status: 200, description: 'Список транзакций' })
+  async getPremixTransactions(@Param('id') premixId: string) {
+    return this.warehouseService.getPremixTransactions(premixId);
+  }
+
+  @Put('premixes/:id')
+  @ApiOperation({ summary: 'Обновить заготовку' })
+  @ApiResponse({ status: 200, description: 'Заготовка обновлена' })
+  async updatePremix(
+    @Param('id') premixId: string,
+    @Body() data: {
+      name?: string;
+      description?: string;
+      unit?: string;
+      yield?: number;
+    },
+  ) {
+    return this.warehouseService.updatePremix(premixId, data);
   }
 
 }
