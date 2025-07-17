@@ -126,12 +126,16 @@ export class ProductService {
 
     return this.getById(product.id);
   }
-
- async update(id: string, dto: ProductDto) {
+async update(id: string, dto: ProductDto) {
     const { restaurantPrices, additives, categoryId, workshopIds, ingredients, ...productData } = dto;
     
     // Удаляем старые связи с ингредиентами
     await this.prisma.productIngredient.deleteMany({
+      where: { productId: id }
+    });
+
+    // Удаляем старые связи с workshops
+    await this.prisma.productWorkshop.deleteMany({
       where: { productId: id }
     });
 
@@ -149,8 +153,14 @@ export class ProductService {
             inventoryItem: { connect: { id: ing.inventoryItemId } }
           }))
         } : undefined,
+        workshops: workshopIds ? {
+          create: workshopIds.map(workshopId => ({
+            workshop: { connect: { id: workshopId } }
+          }))
+        } : undefined,
       },
     });
+
     // Обновляем цены в ресторанах
     if (restaurantPrices) {
       await this.prisma.restaurantProductPrice.deleteMany({
@@ -172,39 +182,43 @@ export class ProductService {
     return this.getById(id);
   }
 
-  async delete(id: string) {
-    await this.getById(id);
+async delete(id: string) {
+  await this.getById(id);
 
-    // Удаляем связанные данные
-    await this.prisma.productWorkshop.deleteMany({
-      where: { productId: id }
-    });
+  await this.prisma.orderItem.deleteMany({
+    where: { productId: id }
+  });
 
-    await this.prisma.restaurantProductPrice.deleteMany({
-      where: { productId: id },
-    });
+  await this.prisma.productDiscount.deleteMany({
+    where: { productId: id }
+  });
 
-    // Add this to delete related ingredients
-    await this.prisma.productIngredient.deleteMany({
-      where: { productId: id }
-    });
+  await this.prisma.productWorkshop.deleteMany({
+    where: { productId: id }
+  });
 
-    // Удаляем сам продукт
-    return this.prisma.product.delete({
-      where: { id },
-    });
-  }
-  
+  await this.prisma.restaurantProductPrice.deleteMany({
+    where: { productId: id },
+  });
+
+  await this.prisma.productIngredient.deleteMany({
+    where: { productId: id }
+  });
+
+  return this.prisma.product.delete({
+    where: { id },
+  });
+}
   async getByCategory(categoryId: string) {
     return this.prisma.product.findMany({
       where: {
         categoryId,
-        publishedOnWebsite: true // только опубликованные на сайте
+        publishedOnWebsite: true 
       },
       include: {
         restaurantPrices: {
           where: {
-            isStopList: false // исключаем стоп-лист
+            isStopList: false 
           }
         },
         category: true,
@@ -216,7 +230,7 @@ export class ProductService {
         },
       },
       orderBy: {
-        createdAt: 'desc' // сортировка по новизне
+        createdAt: 'desc' 
       }
     });
   }
