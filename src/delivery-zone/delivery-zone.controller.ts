@@ -123,4 +123,19 @@ export class DeliveryZoneController {
   async findone(@Param('id') id: string) {
     return this.service.findOne(id);
   }
+
+  @Get('restaurant/:id')
+  @ApiOperation({ summary: 'Get delivery zones for restaurant' })
+  @ApiParam({ name: 'id', description: 'Restaurant ID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of delivery zones',
+    type: [DeliveryZoneEntity],
+  })
+  async getRestaurantDeliveryZones(
+    @Param('id') restaurantId: string,
+  ): Promise<DeliveryZoneEntity[]> {
+    return this.service.findAllByRestaurant(restaurantId);
+  }
+  
 }

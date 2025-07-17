@@ -42,35 +42,32 @@ export class DeliveryZoneService {
   }
 
   
- async findAllByRestaurant(restaurantId: string): Promise<DeliveryZoneEntity[]> {
-  await this.validateRestaurantExists(restaurantId);
+  async findAllByRestaurant(restaurantId: string): Promise<DeliveryZoneEntity[]> {
+    await this.validateRestaurantExists(restaurantId);
 
-  try {
+    try {
+      // Вариант 1: Если polygon хранится как WKT (Well-Known Text)
+      const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
+        SELECT 
+          id,
+          title,
+          price,
+          min_order as "minOrder",
+          restaurant_id as "restaurantId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          polygon
+        FROM delivery_zones
+        WHERE restaurant_id = ${restaurantId}
+        ORDER BY created_at DESC
+      `;
 
-    const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
-      SELECT 
-        id,
-        title,
-        price,
-        min_order as "minOrder",
-        restaurant_id as "restaurantId",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
-        ST_AsGeoJSON(ST_GeomFromText(polygon)) as polygon
-      FROM delivery_zones
-      WHERE restaurant_id = ${restaurantId}
-      ORDER BY created_at DESC
-    `;
-
-    return zones.map(zone => new DeliveryZoneEntity(zone));
-  } catch (error) {
-    if (error.message.includes('function st_geomfromtext')) {
-      throw new Error('PostGIS extension not properly installed or polygon data is malformed');
+      return zones.map(zone => new DeliveryZoneEntity(zone));
+    } catch (error) {
+      this.handleDatabaseError(error, 'Failed to fetch delivery zones');
     }
-    this.handleDatabaseError(error, 'Failed to fetch delivery zones');
   }
-}
-
+  
   async findOne(id: string): Promise<DeliveryZoneEntity> {
     try {
       const [zone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
@@ -217,4 +214,5 @@ async findZoneForPoint(
 
     throw new InternalServerErrorException(context);
   }
+
 }

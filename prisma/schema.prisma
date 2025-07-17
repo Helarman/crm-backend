@@ -87,7 +87,6 @@ model Restaurant {
   yandexEdaIntegration YandexEdaIntegration?    @relation("RestaurantToYandexIntegration")
   productPrices        RestaurantProductPrice[] @relation("RestaurantPrices")
   delivery_zones       DeliveryZone[]
-
   warehouses Warehouse[]
   surcharges RestaurantSurcharge[]
   discounts  RestaurantDiscount[]
