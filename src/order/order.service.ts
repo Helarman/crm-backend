@@ -24,7 +24,7 @@ export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
-    const { restaurant, products, additives, productPrices } = await this.validateOrderData(dto);
+    const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
 
     const stopListProducts = this.checkStopList(products, productPrices);
     if (stopListProducts.length > 0) {
@@ -32,7 +32,7 @@ export class OrderService {
         `Следующие продукты в стоп-листе: ${stopListProducts.join(', ')}`
       );
     }
-
+    
     const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
     let deliveryPrice = 0;
@@ -1449,6 +1449,26 @@ export class OrderService {
     };
 
     return transitions[currentStatus]?.includes(newStatus) || false;
+  }
+ private async getOrderData(dto: CreateOrderDto) {
+    const [restaurant, products, additives, productPrices] = await Promise.all([
+      this.prisma.restaurant.findUnique({
+        where: { id: dto.restaurantId },
+      }),
+      this.prisma.product.findMany({
+        where: { id: { in: dto.items.map(item => item.productId) } },
+      }),
+      this.prisma.additive.findMany({
+        where: { id: { in: dto.items.flatMap(item => item.additiveIds || []) } },
+      }),
+      this.prisma.restaurantProductPrice.findMany({
+        where: {
+          productId: { in: dto.items.map(item => item.productId) },
+          restaurantId: dto.restaurantId,
+        },
+      }),
+    ]);
+    return { restaurant, products, additives, productPrices };
   }
 
   private async validateOrderData(dto: CreateOrderDto) {

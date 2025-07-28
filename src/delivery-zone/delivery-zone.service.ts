@@ -95,42 +95,42 @@ export class DeliveryZoneService {
     }
   }
 
-  async update(
-    id: string,
-    updateDto: UpdateDeliveryZoneDto,
-  ): Promise<DeliveryZoneEntity> {
-    await this.findOne(id); // Проверяем существование зоны
+async update(
+  id: string,
+  updateDto: UpdateDeliveryZoneDto,
+): Promise<DeliveryZoneEntity> {
+  await this.findOne(id); // Проверка существования
 
-    try {
-      const [updatedZone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
-        UPDATE delivery_zones
-        SET 
-          title = ${updateDto.title ?? null},
-          price = ${updateDto.price ?? null},
-          min_order = ${updateDto.minOrder ?? null},
-          ${updateDto.polygon ? 
-            this.prisma.$queryRaw`polygon = ST_GeomFromText(${updateDto.polygon}, 4326),` : 
-            this.prisma.$queryRaw``
-          }
-          updated_at = NOW()
-        WHERE id = ${id}
-        RETURNING 
-          id,
-          title,
-          price,
-          min_order as "minOrder",
-          restaurant_id as "restaurantId",
-          created_at as "createdAt",
-          updated_at as "updatedAt",
-          ST_AsGeoJSON(polygon) as polygon
-      `;
+  try {
+    const polygonUpdate = updateDto.polygon 
+      ? this.prisma.$queryRaw`polygon = ST_GeomFromText(${updateDto.polygon}, 4326)`
+      : this.prisma.$queryRaw``;
 
-      return new DeliveryZoneEntity(updatedZone);
-    } catch (error) {
-      this.handleDatabaseError(error, 'Failed to update delivery zone');
-    }
+    const [updatedZone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
+      UPDATE delivery_zones
+      SET
+        title = ${updateDto.title ?? null},
+        price = ${updateDto.price ?? null},
+        min_order = ${updateDto.minOrder ?? null},
+        ${polygonUpdate},
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING 
+        id,
+        title,
+        price,
+        min_order as "minOrder",
+        restaurant_id as "restaurantId",
+        created_at as "createdAt",
+        updated_at as "updatedAt",
+        ST_AsGeoJSON(polygon) as polygon
+    `;
+
+    return new DeliveryZoneEntity(updatedZone);
+  } catch (error) {
+    this.handleDatabaseError(error, 'Failed to update delivery zone');
   }
-
+}
   async remove(id: string): Promise<DeliveryZoneEntity> {
     const zone = await this.findOne(id);
     

@@ -11,6 +11,7 @@ import {
   DefaultValuePipe,
   ParseArrayPipe,
   ParseBoolPipe,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -41,6 +42,7 @@ export class OrderController {
   @ApiOperation({ summary: 'Создать новый заказ' })
   @ApiResponse({ status: 201, description: 'Заказ создан', type: OrderResponse })
   async createOrder(@Body() dto: CreateOrderDto): Promise<OrderResponse> {
+    console.log(dto)
     return this.orderService.createOrder(dto);
   }
 
