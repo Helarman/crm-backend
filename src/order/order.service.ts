@@ -573,7 +573,7 @@ export class OrderService {
         !additives.some(a => a.id === id)
       );
       throw new NotFoundException(
-        `Не найдены добавки с ID: ${missingIds.join(', ')}`
+        `Не найдены Модификаторы с ID: ${missingIds.join(', ')}`
       );
     }
 
@@ -710,7 +710,7 @@ export class OrderService {
           !additives.some(a => a.id === id)
         );
         throw new NotFoundException(
-          `Не найдены добавки с ID: ${missingIds.join(', ')}`
+          `Не найдены Модификаторы с ID: ${missingIds.join(', ')}`
         );
       }
     }
@@ -1525,7 +1525,7 @@ export class OrderService {
       .filter(id => !additives.some(a => a.id === id));
 
     if (missingAdditives.length > 0) {
-      throw new NotFoundException(`Добавки не найдены: ${missingAdditives.join(', ')}`);
+      throw new NotFoundException(`Модификаторы не найдены: ${missingAdditives.join(', ')}`);
     }
 
     return { restaurant, products, additives, productPrices };

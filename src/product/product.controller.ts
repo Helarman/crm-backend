@@ -127,4 +127,45 @@ import {
 	return this.productService.getByCategory(categoryId);
 	}
 
+	@Put(':id/toggle-print-labels')
+	@HttpCode(200)
+	@ApiOperation({ summary: 'Переключить флаг печати этикеток' })
+	@ApiParam({ name: 'id', description: 'ID товара' })
+	@ApiOkResponse({ description: 'Флаг успешно изменен' })
+	@ApiNotFoundResponse({ description: 'Товар не найден' })
+	async togglePrintLabels(@Param('id') id: string) {
+		return this.productService.togglePrintLabels(id);
+	}
+
+	@Put(':id/toggle-published-on-website')
+	@HttpCode(200)
+	@ApiOperation({ summary: 'Переключить флаг публикации на сайте' })
+	@ApiParam({ name: 'id', description: 'ID товара' })
+	@ApiOkResponse({ description: 'Флаг успешно изменен' })
+	@ApiNotFoundResponse({ description: 'Товар не найден' })
+	async togglePublishedOnWebsite(@Param('id') id: string) {
+		return this.productService.togglePublishedOnWebsite(id);
+	}
+
+	@Put(':id/toggle-published-in-app')
+	@HttpCode(200)
+	@ApiOperation({ summary: 'Переключить флаг публикации в приложении' })
+	@ApiParam({ name: 'id', description: 'ID товара' })
+	@ApiOkResponse({ description: 'Флаг успешно изменен' })
+	@ApiNotFoundResponse({ description: 'Товар не найден' })
+	async togglePublishedInApp(@Param('id') id: string) {
+		return this.productService.togglePublishedInApp(id);
+	}
+
+	@Put(':id/toggle-stop-list')
+	@HttpCode(200)
+	@ApiOperation({ summary: 'Переключить флаг стоп-листа' })
+	@ApiParam({ name: 'id', description: 'ID товара' })
+	@ApiOkResponse({ description: 'Флаг успешно изменен' })
+	@ApiNotFoundResponse({ description: 'Товар не найден' })
+	async toggleStopList(@Param('id') id: string) {
+		return this.productService.toggleStopList(id);
+	}
+	
+
 }

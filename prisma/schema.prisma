@@ -176,14 +176,26 @@ model Additive {
 }
 
 model Category {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   title       String
-  description String
+  description String?
+  slug        String?  @unique
+  image       String?
 
-  products Product[] @relation("ProductToCategory")
+  metaTitle       String?  @map("meta_title")
+  metaDescription String?  @map("meta_description")
+  metaKeywords    String?  @map("meta_keywords")
+
+  parentId   String?  @map("parent_id")
+  parent     Category? @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children   Category[] @relation("CategoryToChildren")
+
+  order      Int      @default(0)
+
+  products   Product[] @relation("ProductToCategory")
 
   @@map("category")
 }
@@ -427,7 +439,6 @@ model YandexEdaOrder {
 
   @@map("yandex_eda_order")
 }
-
 model Warehouse {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
@@ -441,9 +452,58 @@ model Warehouse {
   isActive    Boolean @default(true)
 
   storageLocations StorageLocation[]
-  inventoryItems   InventoryItem[]
+  warehouseItems  WarehouseItem[]
 
   @@map("warehouses")
+}
+
+model WarehouseItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  warehouseId String    @map("warehouse_id")
+
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String        @map("inventory_item_id")
+
+  storageLocation   StorageLocation? @relation(fields: [storageLocationId], references: [id])
+  storageLocationId String?          @map("storage_location_id")
+
+  quantity Float  @default(0)
+  reserved Float  @default(0)
+  minQuantity Float? @map("min_quantity")
+
+  @@unique([warehouseId, inventoryItemId])
+  @@map("warehouse_items")
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  name        String  @unique
+  description String?
+  unit        String
+  cost        Float?
+
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?  @map("product_id")
+
+  isActive Boolean @default(true)
+
+  warehouseItems WarehouseItem[]
+  ingredients    ProductIngredient[]
+  premixIgredients PremixIngredient[]
+
+  premix   Premix? @relation(fields: [premixId], references: [id])
+  premixId String? @unique @map("premix_id")
+
+  @@map("inventory_items")
+  StorageLocation StorageLocation[]
+  InventoryTransaction InventoryTransaction[]
 }
 
 model StorageLocation {
@@ -462,41 +522,10 @@ model StorageLocation {
   inventoryItems InventoryItem[]
 
   @@map("storage_locations")
+  WarehouseItem WarehouseItem[]
 }
 
-model InventoryItem {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
 
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
-  warehouseId String    @map("warehouse_id")
-
-  storageLocation   StorageLocation? @relation(fields: [storageLocationId], references: [id])
-  storageLocationId String?          @map("storage_location_id")
-
-  product   Product? @relation(fields: [productId], references: [id])
-  productId String?  @map("product_id")
-
-  name        String  @unique
-  description String?
-  unit        String
-  quantity    Float   @default(0)
-  reserved    Float   @default(0)
-  minQuantity Float?  @map("min_quantity")
-  cost        Float?
-
-  isActive Boolean @default(true)
-
-  inventoryTransactions InventoryTransaction[]
-  ingredients           ProductIngredient[]
-  premixIgredients      PremixIngredient[]
-
-  premix   Premix? @relation(fields: [premixId], references: [id])
-  premixId String? @unique @map("premix_id")
-
-  @@map("inventory_items")
-}
 
 model ProductIngredient {
   product         Product       @relation(fields: [productId], references: [id])

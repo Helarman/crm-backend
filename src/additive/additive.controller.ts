@@ -21,40 +21,40 @@ import {
   import {AdditiveWithProducts} from './interfaces/additive.interface'
   import { UpdateProductAdditivesDto } from './dto/update-product-additives.dto'
   
-  @ApiTags('Добавки к блюдам')
+  @ApiTags('Модификаторы к блюдам')
   @Controller('additives')
   export class AdditiveController {
     constructor(private readonly additiveService: AdditiveService) {}
   
     @Post()
-    @ApiOperation({ summary: 'Создать новую добавку' })
-    @ApiResponse({ status: 201, description: 'Добавка успешно создана' })
+    @ApiOperation({ summary: 'Создать новую модификатор' })
+    @ApiResponse({ status: 201, description: 'Модификатор успешно создана' })
     @ApiBody({ type: CreateAdditiveDto })
     create(@Body() createAdditiveDto: CreateAdditiveDto): Promise<any> {
       return this.additiveService.create(createAdditiveDto);
     }
   
     @Get()
-    @ApiOperation({ summary: 'Получить все добавки' })
+    @ApiOperation({ summary: 'Получить все Модификаторы' })
     @ApiResponse({ status: 200, description: 'Список всех добавок' })
     findAll(): Promise<any[]> {
       return this.additiveService.findAll();
     }
   
     @Get(':id')
-    @ApiOperation({ summary: 'Получить добавку по ID' })
-    @ApiParam({ name: 'id', description: 'ID добавки' })
-    @ApiResponse({ status: 200, description: 'Найденная добавка' })
-    @ApiResponse({ status: 404, description: 'Добавка не найдена' })
+    @ApiOperation({ summary: 'Получить модификатор по ID' })
+    @ApiParam({ name: 'id', description: 'ID Модификаторы' })
+    @ApiResponse({ status: 200, description: 'Найденная Модификатор' })
+    @ApiResponse({ status: 404, description: 'Модификатор не найдена' })
     findOne(@Param('id') id: string): Promise<AdditiveWithProducts | null> {
       return this.additiveService.findOne(id);
     }
   
     @Patch(':id')
-    @ApiOperation({ summary: 'Обновить добавку' })
-    @ApiParam({ name: 'id', description: 'ID добавки' })
+    @ApiOperation({ summary: 'Обновить модификатор' })
+    @ApiParam({ name: 'id', description: 'ID Модификаторы' })
     @ApiBody({ type: UpdateAdditiveDto })
-    @ApiResponse({ status: 200, description: 'Обновленная добавка' })
+    @ApiResponse({ status: 200, description: 'Обновленная Модификатор' })
     update(
       @Param('id') id: string,
       @Body() updateAdditiveDto: UpdateAdditiveDto,
@@ -63,18 +63,18 @@ import {
     }
   
     @Delete(':id')
-    @ApiOperation({ summary: 'Удалить добавку' })
-    @ApiParam({ name: 'id', description: 'ID добавки' })
-    @ApiResponse({ status: 200, description: 'Удаленная добавка' })
+    @ApiOperation({ summary: 'Удалить модификатор' })
+    @ApiParam({ name: 'id', description: 'ID Модификаторы' })
+    @ApiResponse({ status: 200, description: 'Удаленная Модификатор' })
     remove(@Param('id') id: string): Promise<AdditiveWithProducts> {
       return this.additiveService.remove(id);
     }
   
     @Post(':additiveId/products/:productId')
-    @ApiOperation({ summary: 'Добавить добавку к продукту' })
-    @ApiParam({ name: 'additiveId', description: 'ID добавки' })
+    @ApiOperation({ summary: 'Добавить модификатор к продукту' })
+    @ApiParam({ name: 'additiveId', description: 'ID Модификаторы' })
     @ApiParam({ name: 'productId', description: 'ID продукта' })
-    @ApiResponse({ status: 200, description: 'Добавка привязана к продукту' })
+    @ApiResponse({ status: 200, description: 'Модификатор привязана к продукту' })
     addToProduct(
       @Param('additiveId') additiveId: string,
       @Param('productId') productId: string,
@@ -83,10 +83,10 @@ import {
     }
   
     @Delete(':additiveId/products/:productId')
-    @ApiOperation({ summary: 'Удалить добавку из продукта' })
-    @ApiParam({ name: 'additiveId', description: 'ID добавки' })
+    @ApiOperation({ summary: 'Удалить модификатор из продукта' })
+    @ApiParam({ name: 'additiveId', description: 'ID Модификаторы' })
     @ApiParam({ name: 'productId', description: 'ID продукта' })
-    @ApiResponse({ status: 200, description: 'Добавка отвязана от продукта' })
+    @ApiResponse({ status: 200, description: 'Модификатор отвязана от продукта' })
     removeFromProduct(
       @Param('additiveId') additiveId: string,
       @Param('productId') productId: string,
@@ -95,17 +95,17 @@ import {
     }
 
     @Get('product/:productId')
-    @ApiOperation({ summary: 'Получить добавки продукта' })
+    @ApiOperation({ summary: 'Получить Модификаторы продукта' })
     @ApiParam({ name: 'productId', description: 'ID продукта' })
     async getProductAdditives(@Param('productId') productId: string) {
     return this.additiveService.getProductAdditives(productId);
     }
 
     @Put('product/:productId')
-    @ApiOperation({ summary: 'Обновить добавки продукта' })
+    @ApiOperation({ summary: 'Обновить Модификаторы продукта' })
     @ApiParam({ name: 'productId', description: 'ID продукта' })
     @ApiBody({ type: UpdateProductAdditivesDto })
-    @ApiResponse({ status: 200, description: 'Обновленные добавки продукта' })
+    @ApiResponse({ status: 200, description: 'Обновленные Модификаторы продукта' })
     @ApiResponse({ status: 404, description: 'Продукт не найден' })
     async updateProductAdditives(
       @Param('productId') productId: string,

@@ -1,32 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { Prisma } from '@prisma/client';
+import { InventoryTransactionType, Prisma } from '@prisma/client';
+import { CreateInventoryTransactionDto, CreateWarehouseDto, CreateWarehouseItemDto } from './dto/warehouse.dto';
 
 @Injectable()
 export class WarehouseService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  async getAllInventoryItems() {
-    return this.prisma.inventoryItem.findMany({
-      where: { isActive: true },
-      include: {
-        storageLocation: {
-          select: {
-            id: true,
-            name: true,
-            code: true
-          }
-        },
-        product: {
-          select: {
-            id: true,
-            title: true
-          }
+  // ==================== Warehouse Methods ====================
+
+  async createWarehouse(data: CreateWarehouseDto) {
+    return this.prisma.warehouse.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        restaurant: {
+          connect: { id: data.restaurantId }
         }
-      },
-      orderBy: {
-        name: 'asc'
       }
+    });
+  }
+
+  async getWarehouseById(id: string) {
+    return this.prisma.warehouse.findUnique({
+      where: { id },
+      include: {
+        storageLocations: true,
+        warehouseItems: {
+          include: {
+            inventoryItem: true,
+            storageLocation: true,
+          },
+        },
+        restaurant: true,
+      },
     });
   }
 
@@ -35,49 +42,63 @@ export class WarehouseService {
       where: { restaurantId },
       include: {
         storageLocations: true,
-        inventoryItems: {
+        warehouseItems: {
           include: {
-            premix: true,
+            inventoryItem: {
+              include: {
+                product: true,
+                premix: true,
+              },
+            },
             storageLocation: true,
-            product: true,
           },
         },
+        restaurant: true,
       },
     });
   }
 
-  async createWarehouse(data: { restaurantId: string; name: string; description?: string }) {
-    return this.prisma.warehouse.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        restaurant: { connect: { id: data.restaurantId } },
-      },
-    });
-  }
-
-  async updateWarehouse(id: string, data: { name?: string; description?: string; isActive?: boolean }) {
+  async updateWarehouse(id: string, data: Prisma.WarehouseUpdateInput) {
     return this.prisma.warehouse.update({
       where: { id },
       data,
     });
   }
 
-  async addStorageLocation(warehouseId: string, data: { name: string; code?: string; description?: string }) {
+  async deleteWarehouse(id: string) {
+    // Check if warehouse has items
+    const itemsCount = await this.prisma.warehouseItem.count({
+      where: { warehouseId: id },
+    });
+
+    if (itemsCount > 0) {
+      throw new Error('Cannot delete warehouse with items');
+    }
+
+    return this.prisma.warehouse.delete({
+      where: { id },
+    });
+  }
+
+  // ==================== Storage Location Methods ====================
+
+  async createStorageLocation(data: Prisma.StorageLocationCreateInput) {
     return this.prisma.storageLocation.create({
-      data: {
-        name: data.name,
-        code: data.code,
-        description: data.description,
-        warehouse: { connect: { id: warehouseId } },
+      data,
+    });
+  }
+
+  async getStorageLocationById(id: string) {
+    return this.prisma.storageLocation.findUnique({
+      where: { id },
+      include: {
+        warehouse: true,
+        WarehouseItem: true,
       },
     });
   }
 
-  async updateStorageLocation(
-    id: string,
-    data: { name?: string; code?: string; description?: string; isActive?: boolean },
-  ) {
+  async updateStorageLocation(id: string, data: Prisma.StorageLocationUpdateInput) {
     return this.prisma.storageLocation.update({
       where: { id },
       data,
@@ -85,13 +106,13 @@ export class WarehouseService {
   }
 
   async deleteStorageLocation(id: string) {
-    // Перед удалением проверяем, есть ли связанные inventoryItems
-    const items = await this.prisma.inventoryItem.count({
+    // Check if location has items
+    const itemsCount = await this.prisma.warehouseItem.count({
       where: { storageLocationId: id },
     });
 
-    if (items > 0) {
-      throw new Error('Нельзя удалить место хранения, так как есть связанные позиции');
+    if (itemsCount > 0) {
+      throw new Error('Cannot delete storage location with items');
     }
 
     return this.prisma.storageLocation.delete({
@@ -99,485 +120,263 @@ export class WarehouseService {
     });
   }
 
-  async addInventoryItem(
-    warehouseId: string,
-    data: {
-      name: string;
-      description?: string;
-      unit: string;
-      quantity?: number;
-      minQuantity?: number;
-      cost?: number;
-      storageLocationId?: string;
-      productId?: string;
-    },
-  ) {
-    const quantity = data.quantity || 0;
+  // ==================== Inventory Item Methods ====================
 
+  async createInventoryItem(data: Prisma.InventoryItemCreateInput) {
     return this.prisma.inventoryItem.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        unit: data.unit,
-        quantity,
-        minQuantity: data.minQuantity,
-        cost: data.cost,
-        warehouse: { connect: { id: warehouseId } },
-        storageLocation: data.storageLocationId ? { connect: { id: data.storageLocationId } } : undefined,
-        product: data.productId ? { connect: { id: data.productId } } : undefined,
+      data,
+    });
+  }
+
+  async getInventoryItemById(id: string) {
+    return this.prisma.inventoryItem.findUnique({
+      where: { id },
+      include: {
+        product: true,
+        premix: true,
+        warehouseItems: {
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
+        },
+        ingredients: {
+          include: {
+            product: true,
+          },
+        },
+        premixIgredients: {
+          include: {
+            premix: true,
+          },
+        },
       },
     });
   }
 
-  async updateInventoryItem(
-    id: string,
-    data: {
-      name?: string;
-      description?: string;
-      unit?: string;
-      minQuantity?: number;
-      cost?: number;
-      storageLocationId?: string;
-      productId?: string;
-      isActive?: boolean;
-    },
-  ) {
+  async updateInventoryItem(id: string, data: Prisma.InventoryItemUpdateInput) {
     return this.prisma.inventoryItem.update({
       where: { id },
-      data: {
-        name: data.name,
-        description: data.description,
-        unit: data.unit,
-        minQuantity: data.minQuantity,
-        cost: data.cost,
-        storageLocationId: data.storageLocationId,
-        productId: data.productId,
-        isActive: data.isActive,
-      },
+      data,
     });
   }
 
   async deleteInventoryItem(id: string) {
-    // Мягкое удаление - просто помечаем как неактивное
+    // Soft delete
     return this.prisma.inventoryItem.update({
       where: { id },
       data: { isActive: false },
     });
   }
 
-  async getInventoryItemsByProduct(productId: string) {
-    const inventoryItems = await this.prisma.inventoryItem.findMany({
-      where: { productId },
+  // ==================== Warehouse Item Methods ====================
+
+  async createWarehouseItem(data: CreateWarehouseItemDto) {
+    return this.prisma.warehouseItem.create({
+      data: {
+        quantity: data.quantity,
+        minQuantity: data.minQuantity,
+        warehouse: {
+          connect: { id: data.warehouseId }
+        },
+        inventoryItem: {
+          connect: { id: data.inventoryItemId } 
+        },
+        storageLocation: data.storageLocationId ? {
+          connect: { id: data.storageLocationId }
+        } : undefined
+      }
+    });
+  }
+  
+  async getWarehouseItemById(id: string) {
+    return this.prisma.warehouseItem.findUnique({
+      where: { id },
       include: {
-        storageLocation: true,
+        inventoryItem: true,
         warehouse: true,
-        inventoryTransactions: {
-          orderBy: {
-            createdAt: 'desc'
-          },
-        }
-      }
-    });
-
-    const productWithIngredients = await this.prisma.product.findUnique({
-      where: { id: productId },
-      include: {
-        ingredients: {
-          include: {
-            inventoryItem: {
-              select: {
-                id: true,
-                name: true,
-                unit: true,
-                quantity: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    return {
-      product: {
-        id: productWithIngredients.id,
-        title: productWithIngredients.title,
-        description: productWithIngredients.description,
-        ingredients: productWithIngredients.ingredients.map(i => ({
-          id: i.inventoryItem.id,
-          name: i.inventoryItem.name,
-          unit: i.inventoryItem.unit,
-          requiredQuantity: i.quantity,
-          currentQuantity: i.inventoryItem.quantity
-        }))
-      },
-      inventoryItems: inventoryItems.map(item => ({
-        id: item.id,
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        warehouse: item.warehouse,
-        storageLocation: item.storageLocation,
-        lastTransactions: item.inventoryTransactions
-      }))
-    };
-  }
-
-  async receiveInventory(
-    id: string,
-    data: { quantity: number; reason?: string; documentId?: string; userId?: string },
-  ) {
-    return this.prisma.$transaction(async (prisma) => {
-      const item = await prisma.inventoryItem.findUnique({ where: { id } });
-      if (!item) {
-        throw new Error('Позиция не найдена');
-      }
-
-      const newQuantity = item.quantity + data.quantity;
-
-      // Создаем транзакцию
-      await prisma.inventoryTransaction.create({
-        data: {
-          type: 'RECEIPT',
-          quantity: data.quantity,
-          previousQuantity: item.quantity,
-          newQuantity,
-          reason: data.reason,
-          documentId: data.documentId,
-          inventoryItem: { connect: { id } },
-          user: data.userId ? { connect: { id: data.userId } } : undefined,
-        },
-      });
-
-      // Обновляем количество
-      return prisma.inventoryItem.update({
-        where: { id },
-        data: { quantity: newQuantity },
-      });
-    });
-  }
-
-  async writeOffInventory(
-    id: string,
-    data: { quantity: number; reason?: string; documentId?: string; userId?: string },
-  ) {
-    return this.prisma.$transaction(async (prisma) => {
-      const item = await prisma.inventoryItem.findUnique({ where: { id } });
-      if (!item) {
-        throw new Error('Позиция не найдена');
-      }
-
-      if (item.quantity < data.quantity) {
-        throw new Error('Недостаточное количество для списания');
-      }
-
-      const newQuantity = item.quantity - data.quantity;
-
-      // Создаем транзакцию
-      await prisma.inventoryTransaction.create({
-        data: {
-          type: 'WRITE_OFF',
-          quantity: data.quantity,
-          previousQuantity: item.quantity,
-          newQuantity,
-          reason: data.reason,
-          documentId: data.documentId,
-          inventoryItem: { connect: { id } },
-          user: data.userId ? { connect: { id: data.userId } } : undefined,
-        },
-      });
-
-      // Обновляем количество
-      return prisma.inventoryItem.update({
-        where: { id },
-        data: { quantity: newQuantity },
-      });
-    });
-  }
-
-  async bulkReceiveInventory(
-    items: Array<{ id: string; quantity: number; reason?: string; documentId?: string }>,
-    userId?: string,
-  ) {
-    return this.prisma.$transaction(async (prisma) => {
-      const results = [];
-      for (const item of items) {
-        const result = await this.receiveInventoryPrivate(
-          item.id,
-          {
-            quantity: item.quantity,
-            reason: item.reason,
-            documentId: item.documentId,
-            userId,
-          },
-          prisma,
-        );
-        results.push(result);
-      }
-      return results;
-    });
-  }
-
-  async bulkWriteOffInventory(
-    items: Array<{ id: string; quantity: number; reason?: string; documentId?: string }>,
-    userId?: string,
-  ) {
-    return this.prisma.$transaction(async (prisma) => {
-      const results = [];
-      for (const item of items) {
-        const result = await this.writeOffInventoryPrivate(
-          item.id,
-          {
-            quantity: item.quantity,
-            reason: item.reason,
-            documentId: item.documentId,
-            userId,
-          },
-          prisma,
-        );
-        results.push(result);
-      }
-      return results;
-    });
-  }
-
-  async getInventoryItemTransactions(id: string) {
-    return this.prisma.inventoryTransaction.findMany({
-      where: { inventoryItemId: id },
-      orderBy: { createdAt: 'desc' },
-      include: { user: true },
-    });
-  }
-
-  // Внутренний метод для использования в транзакциях
-  private async receiveInventoryPrivate(
-    id: string,
-    data: { quantity: number; reason?: string; documentId?: string; userId?: string },
-    prisma: Prisma.TransactionClient,
-  ) {
-    const item = await prisma.inventoryItem.findUnique({ where: { id } });
-    if (!item) {
-      throw new Error('Позиция не найдена');
-    }
-
-    const newQuantity = item.quantity + data.quantity;
-
-    // Создаем транзакцию
-    await prisma.inventoryTransaction.create({
-      data: {
-        type: 'RECEIPT',
-        quantity: data.quantity,
-        previousQuantity: item.quantity,
-        newQuantity,
-        reason: data.reason,
-        documentId: data.documentId,
-        inventoryItem: { connect: { id } },
-        user: data.userId ? { connect: { id: data.userId } } : undefined,
+        storageLocation: true,
       },
     });
+  }
 
-    // Обновляем количество
-    return prisma.inventoryItem.update({
+  async updateWarehouseItem(id: string, data: Prisma.WarehouseItemUpdateInput) {
+    return this.prisma.warehouseItem.update({
       where: { id },
-      data: { quantity: newQuantity },
+      data,
     });
   }
 
-  // Внутренний метод для использования в транзакциях
-  private async writeOffInventoryPrivate(
-    id: string,
-    data: { quantity: number; reason?: string; documentId?: string; userId?: string },
-    prisma: Prisma.TransactionClient,
-  ) {
-    const item = await prisma.inventoryItem.findUnique({ where: { id } });
-    if (!item) {
-      throw new Error('Позиция не найдена');
-    }
-
-    if (item.quantity < data.quantity) {
-      throw new Error('Недостаточное количество для списания');
-    }
-
-    const newQuantity = item.quantity - data.quantity;
-
-    // Создаем транзакцию
-    await prisma.inventoryTransaction.create({
-      data: {
-        type: 'WRITE_OFF',
-        quantity: data.quantity,
-        previousQuantity: item.quantity,
-        newQuantity,
-        reason: data.reason,
-        documentId: data.documentId,
-        inventoryItem: { connect: { id } },
-        user: data.userId ? { connect: { id: data.userId } } : undefined,
-      },
-    });
-
-    // Обновляем количество
-    return prisma.inventoryItem.update({
+  async deleteWarehouseItem(id: string) {
+    return this.prisma.warehouseItem.delete({
       where: { id },
-      data: { quantity: newQuantity },
     });
   }
 
-  async getWarehouseTransactionsByPeriod(restaurantId: string, startDate: string, endDate: string) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  // ==================== Inventory Transaction Methods ====================
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new Error('Неверный формат даты');
-    }
-
-    if (start > end) {
-      throw new Error('Начальная дата не может быть позже конечной');
-    }
-
-    const endDatePlusDay = new Date(end);
-    endDatePlusDay.setDate(endDatePlusDay.getDate() + 1);
-
-    const transactions = await this.prisma.inventoryTransaction.findMany({
-      where: {
-        inventoryItem: {
-          warehouse: {
-            restaurantId: restaurantId
-          }
-        },
-        createdAt: {
-          gte: start,
-          lt: endDatePlusDay
-        }
-      },
-      include: {
-        inventoryItem: {
-          include: {
-            warehouse: {
-              select: {
-                id: true,
-                name: true
-              }
-            },
-            product: {
-              select: {
-                id: true,
-                title: true
-              }
-            },
-            storageLocation: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
-          }
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    const transactionsWithIngredients = await Promise.all(
-      transactions.map(async (transaction) => {
-        const productIngredients = await this.prisma.productIngredient.findMany({
-          where: {
-            inventoryItemId: transaction.inventoryItemId
-          },
-          include: {
-            product: {
-              select: {
-                id: true,
-                title: true
-              }
-            }
-          }
-        });
-
-        let ingredients = [];
-        if (transaction.inventoryItem.product) {
-          ingredients = await this.prisma.productIngredient.findMany({
-            where: {
-              productId: transaction.inventoryItem.product.id
-            },
-            include: {
-              inventoryItem: {
-                select: {
-                  id: true,
-                  name: true,
-                  unit: true
-                }
-              }
-            }
-          });
-        }
-
-        return {
-          ...transaction,
-          inventoryItem: {
-            ...transaction.inventoryItem,
-            productIngredients: productIngredients.map(pi => ({
-              product: pi.product,
-              quantity: pi.quantity
-            })),
-            ingredients: ingredients.map(i => ({
-              inventoryItem: i.inventoryItem,
-              quantity: i.quantity
-            }))
-          }
-        };
-      })
-    );
-
-    return transactionsWithIngredients;
-  }
-
-  async createPremix(data: {
-    name: string;
-    description?: string;
-    unit: string;
-    yield?: number;
-    ingredients: Array<{
-      inventoryItemId: string;
-      quantity: number;
-    }>;
+ async createTransaction(data: {
+    inventoryItemId: string;
     warehouseId: string;
+    type: InventoryTransactionType;
+    quantity: number;
+    userId?: string;
+    reason?: string;
+    documentId?: string;
   }) {
     return this.prisma.$transaction(async (prisma) => {
-      // 1. Сначала создаём инвентарную позицию
+      // 1. Находим запись WarehouseItem
+      const warehouseItem = await prisma.warehouseItem.findFirst({
+        where: {
+          inventoryItemId: data.inventoryItemId,
+          warehouseId: data.warehouseId
+        },
+        select: {
+          id: true,
+          quantity: true,
+          reserved: true
+        }
+      });
+
+      if (!warehouseItem) {
+        throw new Error('Warehouse item not found');
+      }
+
+      // 2. Рассчитываем новое количество
+      let newQuantity: number;
+      switch (data.type) {
+        case 'RECEIPT':
+          newQuantity = warehouseItem.quantity + data.quantity;
+          break;
+        case 'WRITE_OFF':
+          newQuantity = warehouseItem.quantity - data.quantity;
+          if (newQuantity < 0) {
+            throw new Error('Insufficient quantity for write-off');
+          }
+          break;
+        case 'CORRECTION':
+          newQuantity = data.quantity;
+          break;
+        case 'TRANSFER':
+          newQuantity = warehouseItem.quantity - data.quantity;
+          if (newQuantity < 0) {
+            throw new Error('Insufficient quantity for transfer');
+          }
+          break;
+        default:
+          throw new Error('Invalid transaction type');
+      }
+
+      // 3. Создаем транзакцию
+      const transaction = await prisma.inventoryTransaction.create({
+        data: {
+          type: data.type,
+          quantity: data.quantity,
+          previousQuantity: warehouseItem.quantity,
+          newQuantity,
+          reason: data.reason,
+          documentId: data.documentId,
+          inventoryItem: {
+            connect: { id: data.inventoryItemId }
+          },
+          user: data.userId ? {
+            connect: { id: data.userId }
+          } : undefined
+        }
+      });
+
+      // 4. Обновляем количество в WarehouseItem (кроме трансферов)
+      if (data.type !== 'TRANSFER') {
+        await prisma.warehouseItem.update({
+          where: { id: warehouseItem.id },
+          data: { quantity: newQuantity }
+        });
+      }
+
+      return transaction;
+    });
+  }
+
+
+
+  async getInventoryTransactionById(id: string) {
+    return this.prisma.inventoryTransaction.findUnique({
+      where: { id },
+      include: {
+        inventoryItem: true,
+        user: true,
+      },
+    });
+  }
+
+  async getInventoryTransactionsByItem(itemId: string) {
+    return this.prisma.inventoryTransaction.findMany({
+      where: { inventoryItemId: itemId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  async getWarehouseTransactions(warehouseId: string, filters: {
+    startDate?: Date;
+    endDate?: Date;
+    type?: InventoryTransactionType;
+  } = {}) {
+    const where: Prisma.InventoryTransactionWhereInput = {
+      inventoryItem: {
+        warehouseItems: {
+          some: {
+            warehouseId,
+          },
+        },
+      },
+    };
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = filters.startDate;
+      if (filters.endDate) where.createdAt.lte = filters.endDate;
+    }
+
+    if (filters.type) {
+      where.type = filters.type;
+    }
+
+    return this.prisma.inventoryTransaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        inventoryItem: true,
+        user: true,
+      },
+    });
+  }
+
+  // ==================== Premix Methods ====================
+
+  async createPremix(data: Prisma.PremixCreateInput) {
+    return this.prisma.$transaction(async (prisma) => {
+      // Create inventory item first
       const inventoryItem = await prisma.inventoryItem.create({
         data: {
-          name: data.name,
-          description: data.description,
-          unit: data.unit,
-          quantity: 0,
-          warehouseId: data.warehouseId,
+          name: data.name as string,
+          description: data.description as string,
+          unit: data.unit as string,
+          isActive: true,
+          premix: {
+            connect: { id: (data as any).id }, 
+          },
         },
       });
 
-
-      // 2. Затем создаём заготовку, используя правильный синтаксис связи
+      // Then create premix with ingredients
       const premix = await prisma.premix.create({
         data: {
-          name: data.name,
-          description: data.description,
-          unit: data.unit,
-          yield: data.yield || 1,
-          inventoryItem: {   // Используем связь через объект
-            connect: { id: inventoryItem.id }
-          },
-          ingredients: {
-            create: data.ingredients.map(ingredient => ({
-              inventoryItem: {
-                connect: { id: ingredient.inventoryItemId }
-              },
-              quantity: ingredient.quantity,
-            })),
+          ...data,
+          inventoryItem: {
+            connect: { id: inventoryItem.id },
           },
         },
         include: {
@@ -589,128 +388,385 @@ export class WarehouseService {
           inventoryItem: true,
         },
       });
+
       return premix;
     });
   }
-  async preparePremix(premixId: string, quantity: number, userId?: string) {
-    return this.prisma.$transaction(async (prisma) => {
-      // 1. Получаем заготовку с ингредиентами
-      const premix = await prisma.premix.findUnique({
-        where: { id: premixId },
-        include: {
-          ingredients: {
-            include: {
-              inventoryItem: true,
-            },
-          },
-          inventoryItem: true,
-        },
-      });
 
-      if (!premix) {
-        throw new Error('Заготовка не найдена');
-      }
-
-      if (!premix.inventoryItem) {
-        throw new Error('Инвентарная позиция для заготовки не найдена');
-      }
-
-      // 2. Проверяем достаточность всех ингредиентов
-      for (const ingredient of premix.ingredients) {
-        const requiredQuantity = ingredient.quantity * quantity;
-        if (ingredient.inventoryItem.quantity < requiredQuantity) {
-          throw new Error(
-            `Недостаточно ингредиента ${ingredient.inventoryItem.name}. Требуется: ${requiredQuantity}, доступно: ${ingredient.inventoryItem.quantity}`,
-          );
-        }
-      }
-
-      // 3. Списание ингредиентов
-      for (const ingredient of premix.ingredients) {
-        const requiredQuantity = ingredient.quantity * quantity;
-
-        // Создаем транзакцию списания
-        await prisma.inventoryTransaction.create({
-          data: {
-            type: 'WRITE_OFF',
-            quantity: requiredQuantity,
-            previousQuantity: ingredient.inventoryItem.quantity,
-            newQuantity: ingredient.inventoryItem.quantity - requiredQuantity,
-            reason: `Приготовление заготовки ${premix.name}`,
-            inventoryItemId: ingredient.inventoryItem.id,
-            userId: userId,
-          },
-        });
-
-        // Обновляем количество
-        await prisma.inventoryItem.update({
-          where: { id: ingredient.inventoryItem.id },
-          data: {
-            quantity: {
-              decrement: requiredQuantity,
-            },
-          },
-        });
-      }
-
-      // 4. Добавление заготовки на склад
-      const resultingQuantity = quantity * (premix.yield || 1);
-
-      // Создаем транзакцию поступления
-      await prisma.inventoryTransaction.create({
-        data: {
-          type: 'RECEIPT',
-          quantity: resultingQuantity,
-          previousQuantity: premix.inventoryItem.quantity,
-          newQuantity: premix.inventoryItem.quantity + resultingQuantity,
-          reason: `Приготовление заготовки ${premix.name}`,
-          inventoryItemId: premix.inventoryItem.id,
-          userId: userId,
-        },
-      });
-
-      // Обновляем количество
-      return prisma.inventoryItem.update({
-        where: { id: premix.inventoryItem.id },
-        data: {
-          quantity: {
-            increment: resultingQuantity,
-          },
-        },
-        include: {
-          premix: {
-            include: {
-              ingredients: {
-                include: {
-                  inventoryItem: true,
-                },
-              },
-            },
-          },
-        },
-      });
-    });
-  }
-
-  async getPremixDetails(premixId: string) {
+  async getPremixById(id: string) {
     return this.prisma.premix.findUnique({
-      where: { id: premixId },
+      where: { id },
       include: {
         ingredients: {
           include: {
             inventoryItem: true,
           },
         },
-        inventoryItem: true,
+        inventoryItem: {
+          include: {
+            warehouseItems: {
+              include: {
+                warehouse: true,
+                storageLocation: true,
+              },
+            },
+          },
+        },
       },
     });
   }
 
-  async listPremixes(warehouseId?: string) {
-    const where: any = {};
-    if (warehouseId) {
-      where.inventoryItem = {
-        warehouseId,
+  async updatePremix(id: string, data: Prisma.PremixUpdateInput) {
+    return this.prisma.$transaction(async (prisma) => {
+      const premix = await prisma.premix.update({
+        where: { id },
+        data: {
+          ...data,
+        },
+        include: {
+          inventoryItem: true,
+        },
+      });
+
+      if (data.name || data.description || data.unit) {
+        await prisma.inventoryItem.update({
+          where: { premixId: id },
+          data: {
+            name: data.name as string,
+            description: data.description as string,
+            unit: data.unit as string,
+          },
+        });
+      }
+
+      return premix;
+    });
+  }
+
+  async deletePremix(id: string) {
+    return this.prisma.$transaction(async (prisma) => {
+      // First delete the premix ingredients
+      await prisma.premixIngredient.deleteMany({
+        where: { premixId: id },
+      });
+
+      // Then delete the premix
+      await prisma.premix.delete({
+        where: { id },
+      });
+
+      // Finally delete the connected inventory item
+      await prisma.inventoryItem.delete({
+        where: { premixId: id },
+      });
+    });
+  }
+
+  async preparePremix(premixId: string, quantity: number, userId?: string) {
+    return this.prisma.$transaction(async (prisma) => {
+      const premix = await prisma.premix.findUnique({
+        where: { id: premixId },
+        include: {
+          ingredients: {
+            include: {
+              inventoryItem: {
+                include: {
+                  warehouseItems: true,
+                },
+              },
+            },
+          },
+          inventoryItem: {
+            include: {
+              warehouseItems: true 
+            }
+          }
+        },
+      });
+
+      if (!premix) {
+        throw new Error('Premix not found');
+      }
+
+      // Check ingredient availability
+      for (const ingredient of premix.ingredients) {
+        const totalAvailable = ingredient.inventoryItem.warehouseItems.reduce(
+          (sum, wi) => sum + wi.quantity - wi.reserved,
+          0,
+        );
+
+        const required = ingredient.quantity * quantity;
+
+        if (totalAvailable < required) {
+          throw new Error(
+            `Not enough ${ingredient.inventoryItem.name}. Required: ${required}, Available: ${totalAvailable}`,
+          );
+        }
+      }
+
+      // Deduct ingredients
+      for (const ingredient of premix.ingredients) {
+        const required = ingredient.quantity * quantity;
+        let remaining = required;
+
+        // Deduct from warehouse items (FIFO)
+        const warehouseItems = await prisma.warehouseItem.findMany({
+          where: {
+            inventoryItemId: ingredient.inventoryItem.id,
+            quantity: { gt: 0 },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        for (const warehouseItem of warehouseItems) {
+          if (remaining <= 0) break;
+
+          const deduct = Math.min(remaining, warehouseItem.quantity);
+          remaining -= deduct;
+
+          await prisma.warehouseItem.update({
+            where: { id: warehouseItem.id },
+            data: { quantity: { decrement: deduct } },
+          });
+
+          await prisma.inventoryTransaction.create({
+            data: {
+              type: 'WRITE_OFF',
+              quantity: deduct,
+              previousQuantity: warehouseItem.quantity,
+              newQuantity: warehouseItem.quantity - deduct,
+              reason: `Premix preparation: ${premix.name}`,
+              inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
+              user: userId ? { connect: { id: userId } } : undefined,
+              documentId: premixId,
+            },
+          });
+        }
+      }
+
+      const resultingQuantity = quantity * (premix.yield || 1);
+      const warehouseItem = premix.inventoryItem.warehouseItems[0];
+
+      if (!warehouseItem) {
+        throw new Error('No warehouse assigned for this premix');
+      }
+
+      const updatedItem = await prisma.warehouseItem.update({
+        where: { id: warehouseItem.id },
+        data: { quantity: { increment: resultingQuantity } },
+      });
+
+      await prisma.inventoryTransaction.create({
+        data: {
+          type: 'RECEIPT',
+          quantity: resultingQuantity,
+          previousQuantity: warehouseItem.quantity,
+          newQuantity: warehouseItem.quantity + resultingQuantity,
+          reason: `Premix preparation: ${premix.name}`,
+          inventoryItem: { connect: { id: premix.inventoryItem.id } },
+          user: userId ? { connect: { id: userId } } : undefined,
+          documentId: premixId,
+        },
+      });
+
+      return updatedItem;
+    });
+  }
+
+  // ==================== Premix Ingredient Methods ====================
+
+  async addPremixIngredient(premixId: string, inventoryItemId: string, quantity: number) {
+    return this.prisma.premixIngredient.create({
+      data: {
+        premix: { connect: { id: premixId } },
+        inventoryItem: { connect: { id: inventoryItemId } },
+        quantity,
+      },
+    });
+  }
+
+  async updatePremixIngredient(premixId: string, inventoryItemId: string, quantity: number) {
+    return this.prisma.premixIngredient.update({
+      where: {
+        premixId_inventoryItemId: {
+          premixId,
+          inventoryItemId,
+        },
+      },
+      data: { quantity },
+    });
+  }
+
+  async removePremixIngredient(premixId: string, inventoryItemId: string) {
+    return this.prisma.premixIngredient.delete({
+      where: {
+        premixId_inventoryItemId: {
+          premixId,
+          inventoryItemId,
+        },
+      },
+    });
+  }
+
+  // ==================== Product Ingredient Methods ====================
+
+  async addProductIngredient(productId: string, inventoryItemId: string, quantity: number) {
+    return this.prisma.productIngredient.create({
+      data: {
+        product: { connect: { id: productId } },
+        inventoryItem: { connect: { id: inventoryItemId } },
+        quantity,
+      },
+    });
+  }
+
+  async updateProductIngredient(productId: string, inventoryItemId: string, quantity: number) {
+    return this.prisma.productIngredient.update({
+      where: {
+        productId_inventoryItemId: {
+          productId,
+          inventoryItemId,
+        },
+      },
+      data: { quantity },
+    });
+  }
+
+  async removeProductIngredient(productId: string, inventoryItemId: string) {
+    return this.prisma.productIngredient.delete({
+      where: {
+        productId_inventoryItemId: {
+          productId,
+          inventoryItemId,
+        },
+      },
+    });
+  }
+
+  // ==================== Utility Methods ====================
+
+  async checkProductIngredientsAvailability(productId: string, quantity: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                warehouseItems: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    const availability = [];
+    let allAvailable = true;
+
+    for (const ingredient of product.ingredients) {
+      const totalAvailable = ingredient.inventoryItem.warehouseItems.reduce(
+        (sum, wi) => sum + wi.quantity - wi.reserved,
+        0,
+      );
+
+      const required = ingredient.quantity * quantity;
+      const isAvailable = totalAvailable >= required;
+
+      availability.push({
+        ingredientId: ingredient.inventoryItem.id,
+        ingredientName: ingredient.inventoryItem.name,
+        required,
+        available: totalAvailable,
+        isAvailable,
+      });
+
+      if (!isAvailable) {
+        allAvailable = false;
+      }
+    }
+
+    return {
+      productId,
+      productName: product.title,
+      quantity,
+      allAvailable,
+      ingredients: availability,
+    };
+  }
+
+  async listInventoryItems(filters: {
+    search?: string;
+    isActive?: boolean;
+  } = {}) {
+    const where: Prisma.InventoryItemWhereInput = {};
+
+
+    if (filters.isActive !== undefined) {
+      where.isActive = filters.isActive;
+    }
+
+    return this.prisma.inventoryItem.findMany({
+      where,
+      include: {
+        product: true,
+        premix: true,
+        warehouseItems: {
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+// ==================== Storage Location List Method ====================
+  async listStorageLocations(warehouseId: string, filters: {
+    search?: string;
+  } = {}) {
+    const where: Prisma.StorageLocationWhereInput = {
+      warehouseId,
+    };
+
+    if (filters.search) {
+      where.OR = [
+        {
+          name: {
+            contains: filters.search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          code: {
+            contains: filters.search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+
+    return this.prisma.storageLocation.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+// ==================== Premix List Method ====================
+  async listPremixes(filters: {
+    search?: string;
+  } = {}) {
+    const where: Prisma.PremixWhereInput = {};
+
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
       };
     }
 
@@ -724,182 +780,9 @@ export class WarehouseService {
         },
         inventoryItem: true,
       },
+      orderBy: { name: 'asc' },
     });
+
+
   }
-
-  async getPremixIngredients(premixId: string) {
-    const premix = await this.prisma.premix.findUnique({
-      where: { id: premixId },
-      include: {
-        ingredients: {
-          include: {
-            inventoryItem: {
-              include: {
-                inventoryTransactions: {
-                  orderBy: {
-                    createdAt: 'desc',
-                  },
-                  take: 5,
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!premix) {
-      throw new Error('Заготовка не найдена');
-    }
-
-    return premix.ingredients.map(ingredient => ({
-      premixId: ingredient.premixId,
-      inventoryItemId: ingredient.inventoryItemId,
-      quantity: ingredient.quantity,
-      inventoryItem: {
-        id: ingredient.inventoryItem.id,
-        name: ingredient.inventoryItem.name,
-        description: ingredient.inventoryItem.description,
-        unit: ingredient.inventoryItem.unit,
-        quantity: ingredient.inventoryItem.quantity,
-        lastTransactions: ingredient.inventoryItem.inventoryTransactions,
-      },
-    }));
-  }
-
-  async addPremixIngredient(
-    premixId: string,
-    data: { inventoryItemId: string; quantity: number },
-  ) {
-    // Проверяем, что ингредиент не дублируется
-    const existing = await this.prisma.premixIngredient.findFirst({
-      where: {
-        premixId,
-        inventoryItemId: data.inventoryItemId,
-      },
-    });
-
-    if (existing) {
-      throw new Error('Этот ингредиент уже добавлен в заготовку');
-    }
-
-    return this.prisma.premixIngredient.create({
-      data: {
-        quantity: data.quantity,
-        premix: { connect: { id: premixId } },
-        inventoryItem: { connect: { id: data.inventoryItemId } },
-      },
-      include: {
-        inventoryItem: true,
-      },
-    });
-  }
-
-  async updatePremixIngredient(
-    premixId: string,
-    ingredientId: string,
-    data: { quantity?: number },
-  ) {
-    return this.prisma.premixIngredient.update({
-      where: {
-        premixId_inventoryItemId: {
-          premixId: premixId,
-          inventoryItemId: ingredientId
-        }
-      },
-      data: {
-        quantity: data.quantity,
-      },
-      include: {
-        inventoryItem: true,
-      },
-    });
-  }
-
-  async removePremixIngredient(premixId: string, ingredientId: string) {
-    const ingredient = await this.prisma.premixIngredient.findFirst({
-      where: {
-        premixId: premixId,
-        inventoryItemId: ingredientId,
-      },
-    });
-
-    if (!ingredient) {
-      throw new Error('Ингредиент не найден в указанной заготовке');
-    }
-
-    return this.prisma.premixIngredient.delete({
-      where: {
-        premixId_inventoryItemId: {
-          premixId: premixId,
-          inventoryItemId: ingredientId
-        }
-      },
-    });
-  }
-  async getPremixTransactions(premixId: string) {
-    const premix = await this.prisma.premix.findUnique({
-      where: { id: premixId },
-      include: {
-        inventoryItem: {
-          select: { id: true }
-        }
-      },
-    });
-
-    if (!premix || !premix.inventoryItem) {
-      throw new Error('Заготовка или связанная инвентарная позиция не найдена');
-    }
-
-    return this.prisma.inventoryTransaction.findMany({
-      where: { inventoryItemId: premix.inventoryItem.id },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
-  }
-  async updatePremix(
-    premixId: string,
-    data: {
-      name?: string;
-      description?: string;
-      unit?: string;
-      yield?: number;
-    },
-  ) {
-    return this.prisma.$transaction(async (prisma) => {
-      // Обновляем саму заготовку
-      const updatedPremix = await prisma.premix.update({
-        where: { id: premixId },
-        data: {
-          name: data.name,
-          description: data.description,
-          unit: data.unit,
-          yield: data.yield,
-        },
-      });
-
-      // Если есть связанная инвентарная позиция - обновляем и её
-      if (data.name || data.description || data.unit) {
-        await prisma.inventoryItem.update({
-          where: { premixId: premixId },
-          data: {
-            name: data.name,
-            description: data.description,
-            unit: data.unit,
-          },
-        });
-      }
-
-      return updatedPremix;
-    });
-  }
-
 }

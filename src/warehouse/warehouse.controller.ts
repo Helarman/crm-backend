@@ -1,290 +1,430 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiOkResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
+import {
+  WarehouseDto,
+  CreateWarehouseDto,
+  UpdateWarehouseDto,
+  StorageLocationDto,
+  CreateStorageLocationDto,
+  UpdateStorageLocationDto,
+  InventoryItemDto,
+  CreateInventoryItemDto,
+  UpdateInventoryItemDto,
+  WarehouseItemDto,
+  CreateWarehouseItemDto,
+  UpdateWarehouseItemDto,
+  InventoryTransactionDto,
+  CreateInventoryTransactionDto,
+  PremixDto,
+  CreatePremixDto,
+  UpdatePremixDto,
+  PremixIngredientDto,
+  AddPremixIngredientDto,
+  ProductIngredientDto,
+  AddProductIngredientDto,
+  InventoryAvailabilityDto,
+} from './dto/warehouse.dto';
+import { InventoryTransactionType } from '@prisma/client';
 
-@ApiTags('Warehouse')
-@Controller('warehouse')
+@ApiTags('Warehouse Management')
+@Controller('warehouses')
 export class WarehouseController {
-  constructor(private readonly warehouseService: WarehouseService) { }
+  constructor(private readonly warehouseService: WarehouseService) {}
 
-  @Get('items')
-  @ApiOperation({ summary: 'Получить все позиции склада' })
-  @ApiOkResponse({ description: 'Список позиций склада' })
-  async getAllInventoryItems() {
-    return this.warehouseService.getAllInventoryItems();
+  // ==================== Warehouse Endpoints ====================
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new warehouse' })
+  @ApiResponse({ status: 201, description: 'Warehouse created', type: WarehouseDto })
+  async createWarehouse(@Body() data: CreateWarehouseDto) {
+    return this.warehouseService.createWarehouse(data) ;
   }
 
-  @Get('restaurant/:id')
-  @ApiOperation({ summary: 'Получить склад ресторана' })
-  @ApiResponse({ status: 200, description: 'Склад найден' })
-  async getRestaurantWarehouse(@Param('id') restaurantId: string) {
+  @Get(':id')
+  @ApiOperation({ summary: 'Get warehouse by ID' })
+  @ApiResponse({ status: 200, description: 'Warehouse found', type: WarehouseDto })
+  async getWarehouse(@Param('id') id: string) {
+    return this.warehouseService.getWarehouseById(id);
+  }
+
+  @Get('restaurant/:restaurantId')
+  @ApiOperation({ summary: 'Get warehouse by restaurant ID' })
+  @ApiResponse({ status: 200, description: 'Warehouse found', type: WarehouseDto })
+  async getRestaurantWarehouse(@Param('restaurantId') restaurantId: string) {
     return this.warehouseService.getRestaurantWarehouse(restaurantId);
   }
 
-  @Post()
-  @ApiOperation({ summary: 'Создать склад' })
-  @ApiResponse({ status: 201, description: 'Склад создан' })
-  async createWarehouse(@Body() data: { restaurantId: string; name: string; description?: string }) {
-    return this.warehouseService.createWarehouse(data);
-  }
-
   @Put(':id')
-  @ApiOperation({ summary: 'Обновить склад' })
-  @ApiResponse({ status: 200, description: 'Склад обновлен' })
+  @ApiOperation({ summary: 'Update warehouse' })
+  @ApiResponse({ status: 200, description: 'Warehouse updated', type: WarehouseDto })
   async updateWarehouse(
     @Param('id') id: string,
-    @Body() data: { name?: string; description?: string; isActive?: boolean },
+    @Body() data: UpdateWarehouseDto,
   ) {
     return this.warehouseService.updateWarehouse(id, data);
   }
 
-  // Storage Locations
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete warehouse' })
+  @ApiResponse({ status: 200, description: 'Warehouse deleted' })
+  async deleteWarehouse(@Param('id') id: string) {
+    return this.warehouseService.deleteWarehouse(id);
+  }
+
+  // ==================== Storage Location Endpoints ====================
+
   @Post(':warehouseId/locations')
-  @ApiOperation({ summary: 'Добавить место хранения' })
-  @ApiResponse({ status: 201, description: 'Место хранения добавлено' })
-  async addStorageLocation(
+  @ApiOperation({ summary: 'Create storage location' })
+  @ApiResponse({ status: 201, description: 'Storage location created', type: StorageLocationDto })
+  async createStorageLocation(
     @Param('warehouseId') warehouseId: string,
-    @Body() data: { name: string; code?: string; description?: string },
+    @Body() data: CreateStorageLocationDto,
   ) {
-    return this.warehouseService.addStorageLocation(warehouseId, data);
+    return this.warehouseService.createStorageLocation({
+      ...data,
+      warehouse: { connect: { id: warehouseId } },
+    });
+  }
+
+  @Get('locations/:id')
+  @ApiOperation({ summary: 'Get storage location by ID' })
+  @ApiResponse({ status: 200, description: 'Storage location found', type: StorageLocationDto })
+  async getStorageLocation(@Param('id') id: string) {
+    return this.warehouseService.getStorageLocationById(id);
   }
 
   @Put('locations/:id')
-  @ApiOperation({ summary: 'Обновить место хранения' })
-  @ApiResponse({ status: 200, description: 'Место хранения обновлено' })
+  @ApiOperation({ summary: 'Update storage location' })
+  @ApiResponse({ status: 200, description: 'Storage location updated', type: StorageLocationDto })
   async updateStorageLocation(
     @Param('id') id: string,
-    @Body() data: { name?: string; code?: string; description?: string; isActive?: boolean },
+    @Body() data: UpdateStorageLocationDto,
   ) {
     return this.warehouseService.updateStorageLocation(id, data);
   }
 
   @Delete('locations/:id')
-  @ApiOperation({ summary: 'Удалить место хранения' })
-  @ApiResponse({ status: 200, description: 'Место хранения удалено' })
+  @ApiOperation({ summary: 'Delete storage location' })
+  @ApiResponse({ status: 200, description: 'Storage location deleted' })
   async deleteStorageLocation(@Param('id') id: string) {
     return this.warehouseService.deleteStorageLocation(id);
   }
 
-  // Inventory Items
-  @Post(':warehouseId/items')
-  @ApiOperation({ summary: 'Добавить позицию на склад' })
-  @ApiResponse({ status: 201, description: 'Позиция добавлена' })
-  async addInventoryItem(
-    @Param('warehouseId') warehouseId: string,
-    @Body() data: {
-      name: string;
-      description?: string;
-      unit: string;
-      quantity?: number;
-      minQuantity?: number;
-      cost?: number;
-      storageLocationId?: string;
-      productId?: string;
-    },
-  ) {
-    return this.warehouseService.addInventoryItem(warehouseId, data);
+  // ==================== Inventory Item Endpoints ====================
+
+  @Post('items')
+  @ApiOperation({ summary: 'Create inventory item' })
+  @ApiResponse({ status: 201, description: 'Inventory item created', type: InventoryItemDto })
+  async createInventoryItem(@Body() data: CreateInventoryItemDto) {
+    return this.warehouseService.createInventoryItem(data);
+  }
+
+  @Get('items/:id')
+  @ApiOperation({ summary: 'Get inventory item by ID' })
+  @ApiResponse({ status: 200, description: 'Inventory item found', type: InventoryItemDto })
+  async getInventoryItem(@Param('id') id: string) {
+    return this.warehouseService.getInventoryItemById(id);
   }
 
   @Put('items/:id')
-  @ApiOperation({ summary: 'Обновить позицию на складе' })
-  @ApiResponse({ status: 200, description: 'Позиция обновлена' })
+  @ApiOperation({ summary: 'Update inventory item' })
+  @ApiResponse({ status: 200, description: 'Inventory item updated', type: InventoryItemDto })
   async updateInventoryItem(
     @Param('id') id: string,
-    @Body() data: {
-      name?: string;
-      description?: string;
-      unit?: string;
-      minQuantity?: number;
-      cost?: number;
-      storageLocationId?: string;
-      productId?: string;
-      isActive?: boolean;
-    },
+    @Body() data: UpdateInventoryItemDto,
   ) {
     return this.warehouseService.updateInventoryItem(id, data);
   }
 
   @Delete('items/:id')
-  @ApiOperation({ summary: 'Удалить позицию со склада' })
-  @ApiResponse({ status: 200, description: 'Позиция удалена' })
+  @ApiOperation({ summary: 'Delete inventory item' })
+  @ApiResponse({ status: 200, description: 'Inventory item deleted' })
   async deleteInventoryItem(@Param('id') id: string) {
     return this.warehouseService.deleteInventoryItem(id);
   }
 
-  @Get('items/product/:productId')
-  @ApiOperation({ summary: 'Получить позиции склада по продукту' })
-  @ApiResponse({ status: 200, description: 'Позиции найдены' })
-  async getInventoryItemsByProduct(@Param('productId') productId: string) {
-    return this.warehouseService.getInventoryItemsByProduct(productId);
+  // ==================== Warehouse Item Endpoints ====================
+
+  @Post('warehouse-items')
+  @ApiOperation({ summary: 'Create warehouse item' })
+  @ApiResponse({ status: 201, description: 'Warehouse item created', type: WarehouseItemDto })
+  async createWarehouseItem(@Body() data: CreateWarehouseItemDto) {
+    return this.warehouseService.createWarehouseItem(data);
   }
 
-  // Inventory Transactions
-  @Post('items/:id/receive')
-  @ApiOperation({ summary: 'Добавить количество к позиции' })
-  @ApiResponse({ status: 201, description: 'Количество добавлено' })
-  async receiveInventory(
+  @Get('warehouse-items/:id')
+  @ApiOperation({ summary: 'Get warehouse item by ID' })
+  @ApiResponse({ status: 200, description: 'Warehouse item found', type: WarehouseItemDto })
+  async getWarehouseItem(@Param('id') id: string) {
+    return this.warehouseService.getWarehouseItemById(id);
+  }
+
+  @Put('warehouse-items/:id')
+  @ApiOperation({ summary: 'Update warehouse item' })
+  @ApiResponse({ status: 200, description: 'Warehouse item updated', type: WarehouseItemDto })
+  async updateWarehouseItem(
     @Param('id') id: string,
-    @Body() data: { quantity: number; reason?: string; documentId?: string; userId?: string },
+    @Body() data: UpdateWarehouseItemDto,
   ) {
-    return this.warehouseService.receiveInventory(id, data);
+    return this.warehouseService.updateWarehouseItem(id, data);
   }
 
-  @Post('items/:id/write-off')
-  @ApiOperation({ summary: 'Списать количество с позиции' })
-  @ApiResponse({ status: 201, description: 'Количество списано' })
-  async writeOffInventory(
-    @Param('id') id: string,
-    @Body() data: { quantity: number; reason?: string; documentId?: string; userId?: string },
-  ) {
-    return this.warehouseService.writeOffInventory(id, data);
+  @Delete('warehouse-items/:id')
+  @ApiOperation({ summary: 'Delete warehouse item' })
+  @ApiResponse({ status: 200, description: 'Warehouse item deleted' })
+  async deleteWarehouseItem(@Param('id') id: string) {
+    return this.warehouseService.deleteWarehouseItem(id);
   }
 
-  @Post('items/bulk/receive')
-  @ApiOperation({ summary: 'Массовое добавление количества к позициям' })
-  @ApiResponse({ status: 201, description: 'Количество добавлено' })
-  async bulkReceiveInventory(
-    @Body() data: Array<{ id: string; quantity: number; reason?: string; documentId?: string }>,
-    @Body('userId') userId?: string,
-  ) {
-    return this.warehouseService.bulkReceiveInventory(data, userId);
+  // ==================== Inventory Transaction Endpoints ====================
+
+  @Post('transactions')
+  @ApiOperation({ summary: 'Create inventory transaction' })
+  @ApiResponse({ status: 201, description: 'Transaction created', type: InventoryTransactionDto })
+  async createInventoryTransaction(@Body() data: CreateInventoryTransactionDto) {
+    return this.warehouseService.createTransaction(data);
   }
 
-  @Post('items/bulk/write-off')
-  @ApiOperation({ summary: 'Массовое списание количества с позиций' })
-  @ApiResponse({ status: 201, description: 'Количество списано' })
-  async bulkWriteOffInventory(
-    @Body() data: Array<{ id: string; quantity: number; reason?: string; documentId?: string }>,
-    @Body('userId') userId?: string,
-  ) {
-    return this.warehouseService.bulkWriteOffInventory(data, userId);
+  @Get('transactions/:id')
+  @ApiOperation({ summary: 'Get transaction by ID' })
+  @ApiResponse({ status: 200, description: 'Transaction found', type: InventoryTransactionDto })
+  async getInventoryTransaction(@Param('id') id: string) {
+    return this.warehouseService.getInventoryTransactionById(id);
   }
 
-  @Get('items/:id/transactions')
-  @ApiOperation({ summary: 'Получить историю операций по позиции' })
-  @ApiResponse({ status: 200, description: 'История операций найдена' })
-  async getInventoryItemTransactions(@Param('id') id: string) {
-    return this.warehouseService.getInventoryItemTransactions(id);
+  @Get('items/:itemId/transactions')
+  @ApiOperation({ summary: 'Get transactions for inventory item' })
+  @ApiResponse({ status: 200, description: 'Transactions found', type: [InventoryTransactionDto] })
+  async getItemTransactions(@Param('itemId') itemId: string) {
+    return this.warehouseService.getInventoryTransactionsByItem(itemId);
   }
 
-  @Get('transactions/restaurant/:id')
-  @ApiOperation({ summary: 'Получить транзакции склада ресторана по периоду дат' })
-  @ApiResponse({ status: 200, description: 'Транзакции найдены' })
-  async getWarehouseTransactionsByPeriod(
-    @Param('id') restaurantId: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+  @Get('warehouse/:warehouseId/transactions')
+  @ApiOperation({ summary: 'Get transactions for warehouse' })
+  @ApiResponse({ status: 200, description: 'Transactions found', type: [InventoryTransactionDto] })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'type', required: false, enum: InventoryTransactionType })
+  async getWarehouseTransactions(
+    @Param('warehouseId') warehouseId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('type') type?: InventoryTransactionType,
   ) {
-    return this.warehouseService.getWarehouseTransactionsByPeriod(restaurantId, startDate, endDate);
+    return this.warehouseService.getWarehouseTransactions(warehouseId, {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      type,
+    });
   }
 
-  @Post('premixes')
-  @ApiOperation({ summary: 'Создать новую заготовку' })
-  @ApiResponse({ status: 201, description: 'Заготовка создана' })
-  async createPremix(
-    @Body()
-    data: {
-      name: string;
-      description?: string;
-      unit: string;
-      yield?: number;
-      ingredients: Array<{
-        inventoryItemId: string;
-        quantity: number;
-      }>;
-      warehouseId: string;
-    },
-  ) {
-    return this.warehouseService.createPremix(data);
-  }
+  // ==================== Premix Endpoints ====================
 
-  @Post('premixes/:id/prepare')
-  @ApiOperation({ summary: 'Приготовить заготовку' })
-  @ApiResponse({ status: 201, description: 'Заготовка приготовлена' })
-  async preparePremix(
-    @Param('id') premixId: string,
-    @Body() data: { quantity: number; userId?: string },
-  ) {
-    return this.warehouseService.preparePremix(
-      premixId,
-      data.quantity,
-      data.userId,
-    );
-  }
+ @Post('premixes')
+@ApiOperation({ summary: 'Create premix' })
+@ApiResponse({ status: 201, description: 'Premix created', type: PremixDto })
+async createPremix(@Body() data: CreatePremixDto) {
+  const prismaData = {
+    ...data,
+    ingredients: {
+      create: data.ingredients.map(ing => ({
+        inventoryItem: { connect: { id: ing.inventoryItemId } },
+        quantity: ing.quantity
+      }))
+    }
+  };
+  
+  return this.warehouseService.createPremix(prismaData);
+}
 
   @Get('premixes/:id')
-  @ApiOperation({ summary: 'Получить детали заготовки' })
-  @ApiResponse({ status: 200, description: 'Детали заготовки' })
-  async getPremixDetails(@Param('id') premixId: string) {
-    return this.warehouseService.getPremixDetails(premixId);
-  }
-
-  @Get('premixes')
-  @ApiOperation({ summary: 'Получить список заготовок' })
-  @ApiResponse({ status: 200, description: 'Список заготовок' })
-  async listPremixes(@Query('warehouseId') warehouseId?: string) {
-    return this.warehouseService.listPremixes(warehouseId);
-  }
-
-
-  @Get('premixes/:id/ingredients')
-  @ApiOperation({ summary: 'Получить ингредиенты заготовки' })
-  @ApiResponse({ status: 200, description: 'Список ингредиентов заготовки' })
-  async getPremixIngredients(@Param('id') premixId: string) {
-    return this.warehouseService.getPremixIngredients(premixId);
-  }
-
-  @Post('premixes/:id/ingredients')
-  @ApiOperation({ summary: 'Добавить ингредиент в заготовку' })
-  @ApiResponse({ status: 201, description: 'Ингредиент добавлен' })
-  async addPremixIngredient(
-    @Param('id') premixId: string,
-    @Body() data: { inventoryItemId: string; quantity: number },
-  ) {
-    return this.warehouseService.addPremixIngredient(premixId, data);
-  }
-
-  @Put('premixes/:id/ingredients/:ingredientId')
-  @ApiOperation({ summary: 'Обновить ингредиент в заготовке' })
-  @ApiResponse({ status: 200, description: 'Ингредиент обновлен' })
-  async updatePremixIngredient(
-    @Param('id') premixId: string,
-    @Param('ingredientId') ingredientId: string,
-    @Body() data: { quantity?: number },
-  ) {
-    return this.warehouseService.updatePremixIngredient(premixId, ingredientId, data);
-  }
-
-  @Delete('premixes/:id/ingredients/:ingredientId')
-  @ApiOperation({ summary: 'Удалить ингредиент из заготовки' })
-  @ApiResponse({ status: 200, description: 'Ингредиент удален' })
-  async removePremixIngredient(
-    @Param('id') premixId: string,
-    @Param('ingredientId') ingredientId: string,
-  ) {
-    return this.warehouseService.removePremixIngredient(premixId, ingredientId);
-  }
-
-  @Get('premixes/:id/transactions')
-  @ApiOperation({ summary: 'Получить транзакции по заготовке' })
-  @ApiResponse({ status: 200, description: 'Список транзакций' })
-  async getPremixTransactions(@Param('id') premixId: string) {
-    return this.warehouseService.getPremixTransactions(premixId);
+  @ApiOperation({ summary: 'Get premix by ID' })
+  @ApiResponse({ status: 200, description: 'Premix found', type: PremixDto })
+  async getPremix(@Param('id') id: string) {
+    return this.warehouseService.getPremixById(id);
   }
 
   @Put('premixes/:id')
-  @ApiOperation({ summary: 'Обновить заготовку' })
-  @ApiResponse({ status: 200, description: 'Заготовка обновлена' })
+  @ApiOperation({ summary: 'Update premix' })
+  @ApiResponse({ status: 200, description: 'Premix updated', type: PremixDto })
   async updatePremix(
-    @Param('id') premixId: string,
-    @Body() data: {
-      name?: string;
-      description?: string;
-      unit?: string;
-      yield?: number;
-    },
+    @Param('id') id: string,
+    @Body() data: UpdatePremixDto,
   ) {
-    return this.warehouseService.updatePremix(premixId, data);
+    return this.warehouseService.updatePremix(id, data);
   }
 
+  @Delete('premixes/:id')
+  @ApiOperation({ summary: 'Delete premix' })
+  @ApiResponse({ status: 200, description: 'Premix deleted' })
+  async deletePremix(@Param('id') id: string) {
+    return this.warehouseService.deletePremix(id);
+  }
+
+  @Post('premixes/:id/prepare')
+  @ApiOperation({ summary: 'Prepare premix' })
+  @ApiResponse({ status: 200, description: 'Premix prepared' })
+  async preparePremix(
+    @Param('id') id: string,
+    @Body('quantity') quantity: number,
+    @Body('userId') userId?: string,
+  ) {
+    return this.warehouseService.preparePremix(id, quantity, userId);
+  }
+
+  // ==================== Premix Ingredient Endpoints ====================
+
+  @Post('premixes/:premixId/ingredients')
+  @ApiOperation({ summary: 'Add ingredient to premix' })
+  @ApiResponse({ status: 201, description: 'Ingredient added', type: PremixIngredientDto })
+  async addPremixIngredient(
+    @Param('premixId') premixId: string,
+    @Body() data: AddPremixIngredientDto,
+  ) {
+    return this.warehouseService.addPremixIngredient(
+      premixId,
+      data.inventoryItemId,
+      data.quantity,
+    );
+  }
+
+  @Put('premixes/:premixId/ingredients/:inventoryItemId')
+  @ApiOperation({ summary: 'Update premix ingredient' })
+  @ApiResponse({ status: 200, description: 'Ingredient updated', type: PremixIngredientDto })
+  async updatePremixIngredient(
+    @Param('premixId') premixId: string,
+    @Param('inventoryItemId') inventoryItemId: string,
+    @Body('quantity') quantity: number,
+  ) {
+    return this.warehouseService.updatePremixIngredient(
+      premixId,
+      inventoryItemId,
+      quantity,
+    );
+  }
+
+  @Delete('premixes/:premixId/ingredients/:inventoryItemId')
+  @ApiOperation({ summary: 'Remove ingredient from premix' })
+  @ApiResponse({ status: 200, description: 'Ingredient removed' })
+  async removePremixIngredient(
+    @Param('premixId') premixId: string,
+    @Param('inventoryItemId') inventoryItemId: string,
+  ) {
+    return this.warehouseService.removePremixIngredient(
+      premixId,
+      inventoryItemId,
+    );
+  }
+
+  // ==================== Product Ingredient Endpoints ====================
+
+  @Post('products/:productId/ingredients')
+  @ApiOperation({ summary: 'Add ingredient to product' })
+  @ApiResponse({ status: 201, description: 'Ingredient added', type: ProductIngredientDto })
+  async addProductIngredient(
+    @Param('productId') productId: string,
+    @Body() data: AddProductIngredientDto,
+  ) {
+    return this.warehouseService.addProductIngredient(
+      productId,
+      data.inventoryItemId,
+      data.quantity,
+    );
+  }
+
+  @Put('products/:productId/ingredients/:inventoryItemId')
+  @ApiOperation({ summary: 'Update product ingredient' })
+  @ApiResponse({ status: 200, description: 'Ingredient updated', type: ProductIngredientDto })
+  async updateProductIngredient(
+    @Param('productId') productId: string,
+    @Param('inventoryItemId') inventoryItemId: string,
+    @Body('quantity') quantity: number,
+  ) {
+    return this.warehouseService.updateProductIngredient(
+      productId,
+      inventoryItemId,
+      quantity,
+    );
+  }
+
+  @Delete('products/:productId/ingredients/:inventoryItemId')
+  @ApiOperation({ summary: 'Remove ingredient from product' })
+  @ApiResponse({ status: 200, description: 'Ingredient removed' })
+  async removeProductIngredient(
+    @Param('productId') productId: string,
+    @Param('inventoryItemId') inventoryItemId: string,
+  ) {
+    return this.warehouseService.removeProductIngredient(
+      productId,
+      inventoryItemId,
+    );
+  }
+
+  // ==================== Utility Endpoints ====================
+
+  @Get('products/:productId/availability')
+  @ApiOperation({ summary: 'Check product ingredients availability' })
+  @ApiResponse({ status: 200, description: 'Availability checked', type: InventoryAvailabilityDto })
+  async checkProductAvailability(
+    @Param('productId') productId: string,
+    @Query('quantity') quantity: number = 1,
+  ) {
+    return this.warehouseService.checkProductIngredientsAvailability(
+      productId,
+      Number(quantity),
+    );
+  }
+
+  // ==================== Inventory Item List Endpoint ====================
+@Get('items')
+@ApiOperation({ summary: 'List all inventory items' })
+@ApiResponse({ status: 200, description: 'List of inventory items', type: [InventoryItemDto] })
+@ApiQuery({ name: 'search', required: false, description: 'Search term for item name' })
+@ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
+async listInventoryItems(
+  @Query('search') search?: string,
+  @Query('isActive') isActive?: boolean,
+) {
+  return this.warehouseService.listInventoryItems({
+    search,
+    isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+  });
+}
+
+// ==================== Storage Location List Endpoint ====================
+@Get(':warehouseId/locations')
+@ApiOperation({ summary: 'List storage locations for warehouse' })
+@ApiResponse({ status: 200, description: 'List of storage locations', type: [StorageLocationDto] })
+@ApiQuery({ name: 'search', required: false, description: 'Search term for location name or code' })
+async listStorageLocations(
+  @Param('warehouseId') warehouseId: string,
+  @Query('search') search?: string,
+) {
+  return this.warehouseService.listStorageLocations(warehouseId, { search });
+}
+
+// ==================== Premix List Endpoint ====================
+@Get('premixes')
+@ApiOperation({ summary: 'List all premixes' })
+@ApiResponse({ status: 200, description: 'List of premixes', type: [PremixDto] })
+@ApiQuery({ name: 'search', required: false, description: 'Search term for premix name' })
+async listPremixes(@Query('search') search?: string) {
+  return this.warehouseService.listPremixes({ search });
+}
 }

@@ -275,4 +275,36 @@ async delete(id: string) {
     unit: i.inventoryItem.unit
   }));
   }
+    async togglePrintLabels(id: string) {
+    const product = await this.getById(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { printLabels: !product.printLabels },
+    });
+  }
+
+  async togglePublishedOnWebsite(id: string) {
+    const product = await this.getById(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { publishedOnWebsite: !product.publishedOnWebsite },
+    });
+  }
+
+  async togglePublishedInApp(id: string) {
+    const product = await this.getById(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { publishedInApp: !product.publishedInApp },
+    });
+  }
+
+  async toggleStopList(id: string) {
+    const product = await this.getById(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { isStopList: !product.isStopList },
+    });
+  }
+  
 }
