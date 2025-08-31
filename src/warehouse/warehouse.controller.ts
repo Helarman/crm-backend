@@ -39,6 +39,8 @@ import {
   ProductIngredientDto,
   AddProductIngredientDto,
   InventoryAvailabilityDto,
+  BulkCreateWarehouseItemsDto,
+  AddMissingItemsDto,
 } from './dto/warehouse.dto';
 import { InventoryTransactionType } from '@prisma/client';
 
@@ -391,19 +393,179 @@ async createPremix(@Body() data: CreatePremixDto) {
     );
   }
 
-  // ==================== Inventory Item List Endpoint ====================
-@Get('items')
-@ApiOperation({ summary: 'List all inventory items' })
-@ApiResponse({ status: 200, description: 'List of inventory items', type: [InventoryItemDto] })
+
+@Get(':warehouseId/items')
+@ApiOperation({ summary: 'Get warehouse items with full details' })
+@ApiResponse({ 
+  status: 200, 
+  description: 'Warehouse items with full details', 
+  type: [WarehouseItemDto] 
+})
 @ApiQuery({ name: 'search', required: false, description: 'Search term for item name' })
-@ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
-async listInventoryItems(
+@ApiQuery({ name: 'lowStock', required: false, description: 'Filter low stock items only', type: Boolean })
+@ApiQuery({ name: 'storageLocationId', required: false, description: 'Filter by storage location' })
+async getWarehouseItems(
+  @Param('warehouseId') warehouseId: string,
   @Query('search') search?: string,
-  @Query('isActive') isActive?: boolean,
+  @Query('lowStock') lowStock?: boolean,
+  @Query('storageLocationId') storageLocationId?: string,
 ) {
-  return this.warehouseService.listInventoryItems({
+  return this.warehouseService.getWarehouseItemsWithDetails(warehouseId, {
     search,
-    isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+    storageLocationId,
+  });
+}
+
+@Get(':warehouseId/missing-items')
+@ApiOperation({ summary: 'Get inventory items not present in warehouse' })
+@ApiResponse({ status: 200, description: 'List of missing items', type: [InventoryItemDto] })
+async getMissingItems(@Param('warehouseId') warehouseId: string) {
+  return this.warehouseService.getItemsNotInWarehouse(warehouseId);
+}
+
+@Post(':warehouseId/add-items')
+@ApiOperation({ summary: 'Add multiple existing items to warehouse' })
+@ApiResponse({ status: 201, description: 'Items added to warehouse', type: [WarehouseItemDto] })
+@ApiBody({ type: [CreateWarehouseItemDto] })
+async addItemsToWarehouse(
+  @Param('warehouseId') warehouseId: string,
+  @Body() items: CreateWarehouseItemDto[]
+) {
+  return this.warehouseService.addExistingItemsToWarehouse(warehouseId, items);
+}
+
+@Get(':warehouseId/coverage')
+@ApiOperation({ summary: 'Get warehouse coverage statistics' })
+@ApiResponse({ 
+  status: 200, 
+  description: 'Warehouse coverage information',
+  schema: {
+    type: 'object',
+    properties: {
+      totalActiveItems: { type: 'number' },
+      itemsInWarehouse: { type: 'number' },
+      coveragePercentage: { type: 'number' },
+      missingCount: { type: 'number' },
+      missingItems: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            unit: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+})
+async getWarehouseCoverage(@Param('warehouseId') warehouseId: string) {
+  return this.warehouseService.getWarehouseCoverage(warehouseId);
+}
+@Post('bulk-create-items')
+@ApiOperation({ summary: 'Bulk create warehouse items for all inventory items in restaurant' })
+@ApiResponse({ 
+  status: 201, 
+  description: 'Warehouse items created in bulk',
+  schema: {
+    type: 'object',
+    properties: {
+      totalItems: { type: 'number' },
+      created: { type: 'number' },
+      skipped: { type: 'number' },
+      errors: { type: 'number' },
+      details: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            inventoryItemId: { type: 'string' },
+            inventoryItemName: { type: 'string' },
+            status: { type: 'string', enum: ['created', 'skipped', 'error'] },
+            error: { type: 'string', nullable: true }
+          }
+        }
+      }
+    }
+  }
+})
+async bulkCreateWarehouseItems(@Body() data: BulkCreateWarehouseItemsDto) {
+  return this.warehouseService.bulkCreateWarehouseItemsForRestaurant(data);
+}
+
+
+@Get('warehouses/:warehouseId/transfers')
+@ApiOperation({ summary: 'Get transfer transactions for warehouse' })
+@ApiResponse({ status: 200, description: 'Transfer transactions found', type: [InventoryTransactionDto] })
+@ApiQuery({ name: 'startDate', required: false })
+@ApiQuery({ name: 'endDate', required: false })
+@ApiQuery({ name: 'direction', required: false, enum: ['incoming', 'outgoing', 'both'] })
+async getWarehouseTransfers(
+  @Param('warehouseId') warehouseId: string,
+  @Query('startDate') startDate?: string,
+  @Query('endDate') endDate?: string,
+  @Query('direction') direction?: 'incoming' | 'outgoing' | 'both',
+) {
+  return this.warehouseService.getTransferTransactions(warehouseId, {
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+    direction,
+  });
+}
+
+@Get('transfers')
+@ApiOperation({ summary: 'Get all transfer transactions' })
+@ApiResponse({ status: 200, description: 'Transfer transactions found', type: [InventoryTransactionDto] })
+@ApiQuery({ name: 'startDate', required: false })
+@ApiQuery({ name: 'endDate', required: false })
+async getAllTransfers(
+  @Query('startDate') startDate?: string,
+  @Query('endDate') endDate?: string,
+) {
+  return this.warehouseService.getTransferTransactions('', {
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+    direction: 'both',
+  });
+}
+
+
+@Post(':warehouseId/add-missing-items')
+@ApiOperation({ summary: 'Add all missing inventory items to warehouse' })
+@ApiResponse({ 
+  status: 201, 
+  description: 'Missing items added to warehouse',
+  schema: {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['success', 'partial', 'error'] },
+      message: { type: 'string' },
+      totalMissing: { type: 'number' },
+      added: { type: 'number' },
+      errors: { type: 'number' },
+      details: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            inventoryItemId: { type: 'string' },
+            inventoryItemName: { type: 'string' },
+            status: { type: 'string', enum: ['added', 'error'] },
+            error: { type: 'string', nullable: true }
+          }
+        }
+      }
+    }
+  }
+})
+async addMissingItems(
+  @Param('warehouseId') warehouseId: string,
+  @Body() data: Omit<AddMissingItemsDto, 'warehouseId'>
+) {
+  return this.warehouseService.addMissingItemsToWarehouse({
+    warehouseId,
+    ...data
   });
 }
 
@@ -427,4 +589,44 @@ async listStorageLocations(
 async listPremixes(@Query('search') search?: string) {
   return this.warehouseService.listPremixes({ search });
 }
+@Get(':warehouseId/premixes')
+@ApiOperation({ summary: 'Get premixes for warehouse with stock information' })
+@ApiResponse({ status: 200, description: 'Premixes with warehouse items', type: [PremixDto] })
+@ApiQuery({ name: 'search', required: false, description: 'Search term for premix name' })
+async getWarehousePremixes(
+  @Param('warehouseId') warehouseId: string,
+  @Query('search') search?: string,
+) {
+  return this.warehouseService.getPremixesWithWarehouseItems(warehouseId, { search });
 }
+
+@Get(':warehouseId/premixes/:id')
+@ApiOperation({ summary: 'Get premix by ID with warehouse stock info' })
+@ApiResponse({ status: 200, description: 'Premix found with warehouse data', type: PremixDto })
+async getWarehousePremix(
+  @Param('warehouseId') warehouseId: string,
+  @Param('id') id: string,
+) {
+  return this.warehouseService.getPremixWithWarehouseInfo(id, warehouseId);
+}
+@Get(':warehouseId/premixes/:premixId/details')
+@ApiOperation({ summary: 'Get premix details with warehouse-specific information' })
+@ApiResponse({ status: 200, description: 'Premix details with warehouse data', type: PremixDto })
+async getPremixWithWarehouseDetails(
+  @Param('warehouseId') warehouseId: string,
+  @Param('premixId') premixId: string
+) {
+  return this.warehouseService.getPremixWithWarehouseDetails(premixId, warehouseId);
+}
+
+@Get(':warehouseId/premixes/:premixId/transactions')
+@ApiOperation({ summary: 'Get transactions for premix in specific warehouse' })
+@ApiResponse({ status: 200, description: 'Premix transactions', type: [InventoryTransactionDto] })
+async getPremixTransactions(
+  @Param('warehouseId') warehouseId: string,
+  @Param('premixId') premixId: string
+) {
+  return this.warehouseService.getPremixTransactions(premixId, warehouseId);
+}
+}
+

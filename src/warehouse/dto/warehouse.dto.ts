@@ -44,6 +44,14 @@ export class CreateWarehouseDto {
 
   @ApiProperty()
   restaurantId?: string;
+
+  initialInventory?: {
+    inventoryItemId: string;
+    quantity?: number;
+    minQuantity?: number;
+    storageLocationId?: string;
+  }[];
+
 }
 
 export class UpdateWarehouseDto {
@@ -155,6 +163,9 @@ export class CreateInventoryItemDto {
 
   @ApiProperty({ required: false })
   productId?: string;
+   addToWarehouseId?: string;
+  initialQuantity?: number;
+
 }
 
 export class UpdateInventoryItemDto {
@@ -272,50 +283,24 @@ export class InventoryTransactionDto implements Partial<InventoryTransaction> {
   updatedAt: Date;
 }
 
-export class CreateInventoryTransactionDto {
-  @ApiProperty()
-  inventoryItemId: string;
-
-  @ApiProperty({ required: false })
-  userId?: string;
-
-  @ApiProperty({ enum: InventoryTransactionType })
-  type: InventoryTransactionType;
-
-  @ApiProperty() 
-  warehouseId: string;
-
-  @ApiProperty()
-  quantity: number;
-
-  @ApiProperty({ required: false })
-  reason?: string;
-
-  @ApiProperty({ required: false })
-  documentId?: string;
-}
-
-export class PremixDto implements Partial<Premix> {
-  @ApiProperty()
+export class PremixDto {
   id: string;
-
-  @ApiProperty()
   name: string;
-
-  @ApiProperty({ required: false })
   description?: string;
-
-  @ApiProperty()
   unit: string;
-
-  @ApiProperty()
   yield: number;
-
-  @ApiProperty()
   createdAt: Date;
-
-  @ApiProperty()
   updatedAt: Date;
+  
+  ingredients: PremixIngredientDto[];
+  inventoryItem?: InventoryItemDto;
+  
+  // Добавляем поле для warehouseItem конкретного склада
+  warehouseItem?: WarehouseItemDto;
+}
+  export class WarehousePremixDto extends PremixDto {
+  warehouseItem?: WarehouseItemDto;
+  availableQuantity: number;
 }
 
 export class CreatePremixDto {
@@ -396,4 +381,109 @@ export class InventoryAvailabilityDto {
     available: number;
     isAvailable: boolean;
   }[];
+}
+
+export class BulkCreateWarehouseItemsDto {
+  @ApiProperty({ description: 'ID ресторана' })
+  restaurantId: string;
+
+  @ApiProperty({ 
+    description: 'ID склада (опционально, если не указан - будет использован склад ресторана)',
+    required: false 
+  })
+  warehouseId?: string;
+
+  @ApiProperty({ 
+    description: 'Количество по умолчанию для всех товаров',
+    required: false,
+    default: 0 
+  })
+  defaultQuantity?: number;
+
+  @ApiProperty({ 
+    description: 'Минимальное количество по умолчанию',
+    required: false 
+  })
+  defaultMinQuantity?: number;
+
+  @ApiProperty({ 
+    description: 'ID места хранения по умолчанию',
+    required: false 
+  })
+  defaultStorageLocationId?: string;
+
+  @ApiProperty({ 
+    description: 'Список конкретных inventoryItem IDs для создания (опционально)',
+    required: false,
+    type: [String] 
+  })
+  specificItemIds?: string[];
+
+  @ApiProperty({ 
+    description: 'Пропускать уже существующие товары на складе',
+    required: false,
+    default: true 
+  })
+  skipExisting?: boolean;
+}
+
+
+export class AddMissingItemsDto {
+  @ApiProperty({ description: 'ID склада' })
+  warehouseId: string;
+
+  @ApiProperty({ 
+    description: 'Количество по умолчанию для добавляемых товаров',
+    required: false,
+    default: 0 
+  })
+  defaultQuantity?: number;
+
+  @ApiProperty({ 
+    description: 'Минимальное количество по умолчанию',
+    required: false 
+  })
+  defaultMinQuantity?: number;
+
+  @ApiProperty({ 
+    description: 'ID места хранения по умолчанию',
+    required: false 
+  })
+  defaultStorageLocationId?: string;
+
+  @ApiProperty({ 
+    description: 'Игнорировать ошибки для отдельных товаров и продолжать',
+    required: false,
+    default: false 
+  })
+  ignoreErrors?: boolean;
+}
+
+export class CreateInventoryTransactionDto {
+  @ApiProperty()
+  inventoryItemId: string;
+
+  @ApiProperty()
+  warehouseId: string;
+
+  @ApiProperty({ required: false })
+  warehouseItemId?: string;
+
+  @ApiProperty({ required: false })
+  targetWarehouseId?: string; // Для трансферов
+
+  @ApiProperty({ enum: InventoryTransactionType })
+  type: InventoryTransactionType;
+
+  @ApiProperty()
+  quantity: number;
+
+  @ApiProperty({ required: false })
+  userId?: string;
+
+  @ApiProperty({ required: false })
+  reason?: string;
+
+  @ApiProperty({ required: false })
+  documentId?: string;
 }
