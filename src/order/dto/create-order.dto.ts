@@ -46,6 +46,9 @@ export class CreateOrderDto {
   @ApiProperty({ required: false })
   shiftId?: string;
 
+  @ApiProperty({ required: false })
+  phone?: string; 
+
   @ApiProperty()
   type: EnumOrderType;
 

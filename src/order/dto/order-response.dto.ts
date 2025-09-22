@@ -13,6 +13,7 @@ export class OrderResponse {
   comment?: string;
   discountAmount: number;
   bonusPointsUsed: number;
+  phone?: string
   customer?: {
     id: string;
     name: string;
@@ -62,6 +63,10 @@ export class OrderResponse {
       pausedAt?: Date;
       refundedAt?: Date;
     };
+    startedBy?: { id: string; name: string };
+    completedBy?: { id: string; name: string };
+    pausedBy?: { id: string; name: string };
+    refundedBy?: { id: string; name: string };
     assignedTo?: {
       id: string;
       name: string;

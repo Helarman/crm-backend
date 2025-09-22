@@ -51,6 +51,7 @@ export class OrderService {
           source: dto.source,
           number: orderNumber,
           customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
+          phone: dto.phone,
           restaurant: { connect: { id: dto.restaurantId } },
           shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
           type: dto.type,
@@ -123,7 +124,6 @@ export class OrderService {
     if (!order) throw new NotFoundException('Заказ не найден');
     
     const response = this.mapToResponse(order);
-    
     return {
       ...response,
       restaurant: {
@@ -392,43 +392,36 @@ export class OrderService {
     switch (dto.status) {
       case EnumOrderItemStatus.IN_PROGRESS:
         updateData.startedAt = now;
+        updateData.startedById = dto.userId;
         if (dto.userId) {
           updateData.assignedToId = dto.userId;
         }
         break;
       case EnumOrderItemStatus.COMPLETED:
         updateData.completedAt = now;
+        updateData.completedById = dto.userId;
         break;
       case EnumOrderItemStatus.CANCELLED:
         updateData.cancelledAt = now;
+        updateData.cancelledById = dto.userId;
         break;
       case EnumOrderItemStatus.PAUSED:
         updateData.pausedAt = now;
+        updateData.pausedById = dto.userId;
+        break;
+      case EnumOrderItemStatus.REFUNDED:
+        updateData.refundedAt = now;
+        updateData.refundedById = dto.userId;
         break;
     }
 
-    await this.prisma.orderItem.update({
-      where: { id: itemId },
-      data: updateData,
-    });
+  await this.prisma.orderItem.update({
+    where: { id: itemId },
+    data: updateData,
+  });
 
-    const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
-    const response = this.mapToResponse(updatedOrder);
-    return {
-      ...response,
-      restaurant: {
-        ...response.restaurant,
-        legalInfo: updatedOrder.restaurant?.legalInfo,
-        network: updatedOrder.restaurant?.network ? {
-          id: updatedOrder.restaurant.network.id,
-          name: updatedOrder.restaurant.network.name,
-          tenant: updatedOrder.restaurant.network.tenant ? {
-            domain: updatedOrder.restaurant.network.tenant.domain,
-            subdomain: updatedOrder.restaurant.network.tenant.subdomain
-          } : undefined
-        } : undefined
-      }
-    };
+  const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
+  return this.mapToResponse(updatedOrder);
   }
 
   async bulkUpdateOrderItemsStatus(
@@ -1087,10 +1080,11 @@ export class OrderService {
     return this.mapToResponse(updatedOrder);
   }
 
-  async refundOrderItem(
+  async updateOrderItemQuantity(
     orderId: string,
     itemId: string,
-    reason: string
+    newQuantity: number,
+    userId?: string
   ): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -1100,6 +1094,259 @@ export class OrderService {
           include: { additives: true }
         },
         payment: true,
+        restaurant: true
+      },
+    });
+
+    if (!order) throw new NotFoundException('Заказ не найден');
+    
+    const item = order.items[0];
+    if (!item) throw new NotFoundException('Позиция заказа не найдена');
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    if (newQuantity <= 0) {
+      throw new BadRequestException('Количество должно быть больше 0');
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemPricePerUnit = item.price + additivesPrice;
+    const oldTotalPrice = itemPricePerUnit * item.quantity;
+    const newTotalPrice = itemPricePerUnit * newQuantity;
+    const priceDifference = newTotalPrice - oldTotalPrice;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.update({
+        where: { id: itemId },
+        data: { 
+          quantity: newQuantity,
+          // Помечаем как дозаказ если уменьшаем количество после подтверждения
+          isReordered: item.status !== 'CREATED' && newQuantity < item.quantity
+        },
+      });
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { increment: priceDifference },
+          isReordered: newQuantity < item.quantity // Флаг дозаказа
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { increment: priceDifference } },
+        });
+      }
+
+      // Логируем изменение
+      await prisma.orderLog.create({
+        data: {
+          orderId,
+          userId,
+          action: 'UPDATE_QUANTITY',
+          message: `Изменено количество с ${item.quantity} на ${newQuantity}"`,
+          metadata: {
+            itemId,
+            oldQuantity: item.quantity,
+            newQuantity,
+            priceDifference
+          }
+        }
+      });
+
+      return updated;
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+  async partialRefundOrderItem(
+    orderId: string,
+    itemId: string,
+    refundQuantity: number,
+    reason: string,
+    userId?: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { additives: true }
+        },
+        payment: true,
+        restaurant: true
+      },
+    });
+
+    if (!order) throw new NotFoundException('Заказ не найден');
+    
+    const item = order.items[0];
+    if (!item) throw new NotFoundException('Позиция заказа не найдена');
+
+    if (refundQuantity <= 0 || refundQuantity > item.quantity) {
+      throw new BadRequestException(
+        `Количество для возврата должно быть от 1 до ${item.quantity}`
+      );
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemPricePerUnit = item.price + additivesPrice;
+    const refundAmount = itemPricePerUnit * refundQuantity;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      if (refundQuantity === item.quantity) {
+        // Полный возврат - используем существующий метод
+        await prisma.orderItem.update({
+          where: { id: itemId },
+          data: { 
+            isRefund: true,
+            refundReason: reason,
+            status: 'REFUNDED',
+            refundedAt: new Date(),
+            refundedById: userId,
+          },
+        });
+      } else {
+        // Частичный возврат - создаем новую позицию для возврата
+        const remainingQuantity = item.quantity - refundQuantity;
+        
+        // Обновляем текущую позицию
+        await prisma.orderItem.update({
+          where: { id: itemId },
+          data: { 
+            quantity: remainingQuantity,
+            isReordered: true // Помечаем как измененную
+          },
+        });
+
+        // Создаем позицию возврата
+        await prisma.orderItem.create({
+          data: {
+            orderId,
+            productId: item.productId,
+            quantity: refundQuantity,
+            price: item.price,
+            comment: `Возврат: ${reason}`,
+            status: 'REFUNDED',
+            isRefund: true,
+            refundReason: reason,
+            refundedAt: new Date(),
+            refundedById: userId,
+            additives: item.additives.length > 0 
+              ? { connect: item.additives.map(a => ({ id: a.id })) }
+              : undefined,
+          },
+        });
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { decrement: refundAmount },
+          isRefund: true,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: refundAmount } },
+        });
+      }
+
+      // Логируем возврат
+      await prisma.orderLog.create({
+        data: {
+          orderId,
+          userId,
+          action: 'PARTIAL_REFUND',
+          message: `Частичный возврат ${refundQuantity} из ${item.quantity}`,
+          metadata: {
+            itemId,
+            refundQuantity,
+            totalQuantity: item.quantity,
+            refundAmount,
+            reason
+          }
+        }
+      });
+
+      return updated;
+    });
+
+    return this.mapToResponse(updatedOrder);
+  }
+
+
+  async refundOrderItem(
+  orderId: string,
+  itemId: string,
+  reason: string,
+  userId?: string
+): Promise<OrderResponse> {
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: { 
+      items: {
+        where: { id: itemId },
+        include: { additives: true }
+      },
+      payment: true,
+      restaurant: {
+        include: {
+          network: {
+            include: {
+              tenant: true
+            }
+          }
+        }
+      }
+    },
+  });
+
+  if (!order) {
+    throw new NotFoundException('Заказ не найден');
+  }
+
+  const item = order.items[0];
+  if (!item) {
+    throw new NotFoundException('Позиция заказа не найдена');
+  }
+
+  if (item.isRefund) {
+    throw new BadRequestException('Этот товар уже был возвращен');
+  }
+
+  const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+  const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
+
+  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+    await prisma.orderItem.update({
+      where: { id: itemId },
+      data: { 
+        isRefund: true,
+        refundReason: reason,
+        status: 'REFUNDED',
+        refundedAt: new Date(),
+        refundedById: userId, // Добавляем информацию о пользователе
+      },
+    });
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { 
+        totalAmount: { decrement: itemTotalPrice },
+        isRefund: true,
+      },
+      include: {
+        ...this.getOrderInclude(),
         restaurant: {
           include: {
             network: {
@@ -1112,80 +1359,33 @@ export class OrderService {
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    const item = order.items[0];
-    if (!item) {
-      throw new NotFoundException('Позиция заказа не найдена');
-    }
-
-    if (item.isRefund) {
-      throw new BadRequestException('Этот товар уже был возвращен');
-    }
-
-    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
-    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      await prisma.orderItem.update({
-        where: { id: itemId },
-        data: { 
-          isRefund: true,
-          refundReason: reason,
-          status: 'REFUNDED',
-          refundedAt: new Date(),
-        },
+    if (order.payment) {
+      await prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { amount: { decrement: itemTotalPrice } },
       });
+    }
 
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: { 
-          totalAmount: { decrement: itemTotalPrice },
-          isRefund: true,
-        },
-        include: {
-          ...this.getOrderInclude(),
-          restaurant: {
-            include: {
-              network: {
-                include: {
-                  tenant: true
-                }
-              }
-            }
-          }
-        },
-      });
+    return updated;
+  });
 
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: itemTotalPrice } },
-        });
-      }
-
-      return updated;
-    });
-
-    const response = this.mapToResponse(updatedOrder);
-    return {
-      ...response,
-      restaurant: {
-        ...response.restaurant,
-        legalInfo: updatedOrder.restaurant?.legalInfo,
-        network: updatedOrder.restaurant?.network ? {
-          id: updatedOrder.restaurant.network.id,
-          name: updatedOrder.restaurant.network.name,
-          tenant: updatedOrder.restaurant.network.tenant ? {
-            domain: updatedOrder.restaurant.network.tenant.domain,
-            subdomain: updatedOrder.restaurant.network.tenant.subdomain
-          } : undefined
+  const response = this.mapToResponse(updatedOrder);
+  return {
+    ...response,
+    restaurant: {
+      ...response.restaurant,
+      legalInfo: updatedOrder.restaurant?.legalInfo,
+      network: updatedOrder.restaurant?.network ? {
+        id: updatedOrder.restaurant.network.id,
+        name: updatedOrder.restaurant.network.name,
+        tenant: updatedOrder.restaurant.network.tenant ? {
+          domain: updatedOrder.restaurant.network.tenant.domain,
+          subdomain: updatedOrder.restaurant.network.tenant.subdomain
         } : undefined
-      }
-    };
-  }
+      } : undefined
+    }
+  };
+}
 
   async updateOrder(id: string, dto: UpdateOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
@@ -1217,6 +1417,7 @@ export class OrderService {
       numberOfPeople: dto.numberOfPeople?.toString(),
       tableNumber: dto.tableNumber?.toString(),
       comment: dto.comment,
+      phone: dto.phone,
       deliveryAddress: dto.deliveryAddress,
       deliveryTime: dto.deliveryTime ? timeStringToISODate(dto.deliveryTime) : undefined,
       deliveryNotes: dto.deliveryNotes,
@@ -1602,6 +1803,30 @@ export class OrderService {
               name: true,
             },
           },
+          startedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          completedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          pausedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          refundedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       },
       customer: true,
@@ -1629,7 +1854,23 @@ export class OrderService {
         completedAt: item.completedAt,
         pausedAt: item.pausedAt,
         refundedAt: item.refundedAt,
-      }
+      },
+      startedBy: item.startedBy ? {
+        id: item.startedBy.id,
+        name: item.startedBy.name,
+      } : null,
+      completedBy: item.completedBy ? {
+        id: item.completedBy.id,
+        name: item.completedBy.name,
+      } : null,
+      pausedBy: item.pausedBy ? {
+        id: item.pausedBy.id,
+        name: item.pausedBy.name,
+      } : null,
+      refundedBy: item.refundedBy ? {
+        id: item.refundedBy.id,
+        name: item.refundedBy.name,
+      } : null,
     })) || [];
 
     const totalPrice = itemsWithTotals.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
@@ -1643,6 +1884,7 @@ export class OrderService {
       type: order.type,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
+      phone: order.phone, 
       scheduledAt: order.scheduledAt,
       comment: order.comment,
       tableNumber: order.tableNumber,
@@ -1671,6 +1913,10 @@ export class OrderService {
         status: item.status,
         isReordered: item.isReordered,
         timestamps: item.timestamps,
+        startedBy: item.startedBy,
+        completedBy: item.completedBy,
+        refundedBy: item.refundedBy,
+        pausedBy: item.pausedBy,
         isRefund: item.isRefund,
         refundReason: item.refundReason,
         assignedTo: item.assignedTo ? {

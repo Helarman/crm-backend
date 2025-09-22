@@ -32,6 +32,8 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateAttentionFlagsDto } from './dto/update-attention-flags.dto';
 import { PaginatedResponse } from './dto/paginated-response.dto';
 import { EnumOrderStatus } from '@prisma/client';
+import { UpdateOrderItemQuantityDto } from './dto/update-order-item-quantity.dto';
+import { PartialRefundOrderItemDto } from './dto/partial-refund-item.dto';
 
 @ApiTags('Заказы')
 @Controller('orders')
@@ -42,7 +44,6 @@ export class OrderController {
   @ApiOperation({ summary: 'Создать новый заказ' })
   @ApiResponse({ status: 201, description: 'Заказ создан', type: OrderResponse })
   async createOrder(@Body() dto: CreateOrderDto): Promise<OrderResponse> {
-    console.log(dto)
     return this.orderService.createOrder(dto);
   }
 
@@ -257,13 +258,14 @@ export class OrderController {
     description: 'Блюдо возвращено', 
     type: OrderResponse 
   })
-  async refundOrderItem(
-    @Param('orderId') orderId: string,
-    @Param('itemId') itemId: string,
-    @Body() body: { reason: string }
-  ): Promise<OrderResponse> {
-    return this.orderService.refundOrderItem(orderId, itemId, body.reason);
-  }
+async refundItem(
+  @Param('orderId') orderId: string,
+  @Param('itemId') itemId: string,
+  @Body() dto: { reason: string; userId?: string },
+) {
+  const userId = dto.userId
+  return this.orderService.refundOrderItem(orderId, itemId, dto.reason, userId);
+}
 
   @Patch(':id/customer')
   @ApiOperation({ summary: 'Привязать клиента к заказу' })
@@ -372,4 +374,34 @@ export class OrderController {
     return this.orderService.removeDiscountFromOrder(orderId);
   }
 
+  @Patch(':orderId/items/:itemId/quantity')
+  async updateOrderItemQuantity(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateOrderItemQuantityDto,
+  ): Promise<OrderResponse> {
+    return this.orderService.updateOrderItemQuantity(
+      orderId,
+      itemId,
+      dto.quantity,
+      dto.userId,
+    );
+  }
+
+  // Эндпоинт для частичного возврата позиции
+  @Post(':orderId/items/:itemId/partial-refund')
+  async partialRefundOrderItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: PartialRefundOrderItemDto,
+  ): Promise<OrderResponse> {
+    return this.orderService.partialRefundOrderItem(
+      orderId,
+      itemId,
+      dto.quantity,
+      dto.reason,
+      dto.userId,
+    );
+  }
+  
 }

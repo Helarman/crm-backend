@@ -41,6 +41,9 @@ import {
   InventoryAvailabilityDto,
   BulkCreateWarehouseItemsDto,
   AddMissingItemsDto,
+  UpdateInventoryCategoryDto,
+  InventoryCategoryDto,
+  CreateInventoryCategoryDto,
 } from './dto/warehouse.dto';
 import { InventoryTransactionType } from '@prisma/client';
 
@@ -136,6 +139,17 @@ export class WarehouseController {
   async createInventoryItem(@Body() data: CreateInventoryItemDto) {
     return this.warehouseService.createInventoryItem(data);
   }
+
+@Get('items/all')
+@ApiOperation({ summary: 'Получить все позиции склада' })
+async getAllInventoryItems() {
+  try {
+    const result = await this.warehouseService.getAllInventoryItems();
+    return result;
+  } catch (error) {
+    throw error;
+  }
+}
 
   @Get('items/:id')
   @ApiOperation({ summary: 'Get inventory item by ID' })
@@ -423,17 +437,6 @@ async getMissingItems(@Param('warehouseId') warehouseId: string) {
   return this.warehouseService.getItemsNotInWarehouse(warehouseId);
 }
 
-@Post(':warehouseId/add-items')
-@ApiOperation({ summary: 'Add multiple existing items to warehouse' })
-@ApiResponse({ status: 201, description: 'Items added to warehouse', type: [WarehouseItemDto] })
-@ApiBody({ type: [CreateWarehouseItemDto] })
-async addItemsToWarehouse(
-  @Param('warehouseId') warehouseId: string,
-  @Body() items: CreateWarehouseItemDto[]
-) {
-  return this.warehouseService.addExistingItemsToWarehouse(warehouseId, items);
-}
-
 @Get(':warehouseId/coverage')
 @ApiOperation({ summary: 'Get warehouse coverage statistics' })
 @ApiResponse({ 
@@ -462,36 +465,6 @@ async addItemsToWarehouse(
 })
 async getWarehouseCoverage(@Param('warehouseId') warehouseId: string) {
   return this.warehouseService.getWarehouseCoverage(warehouseId);
-}
-@Post('bulk-create-items')
-@ApiOperation({ summary: 'Bulk create warehouse items for all inventory items in restaurant' })
-@ApiResponse({ 
-  status: 201, 
-  description: 'Warehouse items created in bulk',
-  schema: {
-    type: 'object',
-    properties: {
-      totalItems: { type: 'number' },
-      created: { type: 'number' },
-      skipped: { type: 'number' },
-      errors: { type: 'number' },
-      details: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            inventoryItemId: { type: 'string' },
-            inventoryItemName: { type: 'string' },
-            status: { type: 'string', enum: ['created', 'skipped', 'error'] },
-            error: { type: 'string', nullable: true }
-          }
-        }
-      }
-    }
-  }
-})
-async bulkCreateWarehouseItems(@Body() data: BulkCreateWarehouseItemsDto) {
-  return this.warehouseService.bulkCreateWarehouseItemsForRestaurant(data);
 }
 
 
@@ -628,5 +601,78 @@ async getPremixTransactions(
 ) {
   return this.warehouseService.getPremixTransactions(premixId, warehouseId);
 }
+
+@Post('categories')
+@ApiOperation({ summary: 'Create inventory category' })
+@ApiResponse({ status: 201, description: 'Category created', type: InventoryCategoryDto })
+async createInventoryCategory(@Body() data: CreateInventoryCategoryDto) {
+  return this.warehouseService.createInventoryCategory(data);
+}
+
+@Get('categories')
+@ApiOperation({ summary: 'Get all inventory categories' })
+@ApiResponse({ status: 200, description: 'Categories found', type: [InventoryCategoryDto] })
+@ApiQuery({ name: 'search', required: false })
+@ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
+@ApiQuery({ name: 'parentId', required: false })
+async getInventoryCategories(
+  @Query('search') search?: string,
+  @Query('includeInactive') includeInactive?: boolean,
+  @Query('parentId') parentId?: string,
+) {
+  const data =  this.warehouseService.getAllInventoryCategories({
+    search,
+    parentId: parentId === 'null' ? null : parentId,
+  });
+  return data;
+}
+
+@Get('categories/tree')
+@ApiOperation({ summary: 'Get category tree structure' })
+@ApiResponse({ status: 200, description: 'Category tree found', type: [InventoryCategoryDto] })
+async getCategoryTree() {
+  return this.warehouseService.getCategoryTree();
+}
+
+@Get('categories/:id')
+@ApiOperation({ summary: 'Get inventory category by ID' })
+@ApiResponse({ status: 200, description: 'Category found', type: InventoryCategoryDto })
+async getInventoryCategory(@Param('id') id: string) {
+  return this.warehouseService.getInventoryCategoryById(id);
+}
+
+@Put('categories/:id')
+@ApiOperation({ summary: 'Update inventory category' })
+@ApiResponse({ status: 200, description: 'Category updated', type: InventoryCategoryDto })
+async updateInventoryCategory(
+  @Param('id') id: string,
+  @Body() data: UpdateInventoryCategoryDto,
+) {
+  return this.warehouseService.updateInventoryCategory(id, data);
+}
+
+@Delete('categories/:id')
+@ApiOperation({ summary: 'Delete inventory category' })
+@ApiResponse({ status: 200, description: 'Category deleted' })
+async deleteInventoryCategory(@Param('id') id: string) {
+  return this.warehouseService.deleteInventoryCategory(id);
+}
+
+@Get('categories/:categoryId/items')
+@ApiOperation({ summary: 'Get inventory items by category' })
+@ApiResponse({ status: 200, description: 'Items found', type: [InventoryItemDto] })
+@ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
+@ApiQuery({ name: 'warehouseId', required: false })
+async getItemsByCategory(
+  @Param('categoryId') categoryId: string,
+  @Query('includeInactive') includeInactive?: boolean,
+  @Query('warehouseId') warehouseId?: string,
+) {
+  return this.warehouseService.getInventoryItemsByCategory(categoryId, {
+    warehouseId,
+  });
+}
+
+
 }
 

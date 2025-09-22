@@ -167,5 +167,28 @@ import {
 		return this.productService.toggleStopList(id);
 	}
 	
+@Post(':id/sort-order')
+  async updateSortOrder(
+    @Param('id') id: string,
+    @Body() body: { sortOrder: number }
+  ) {
+    return this.productService.updateSortOrder(id, body.sortOrder);
+  }
 
+
+
+  @Get('category/:categoryId/order-stats')
+  async getCategoryOrderStats(@Param('categoryId') categoryId: string) {
+    const products = await this.productService.getByCategory(categoryId);
+    return {
+      count: products.length,
+      minOrder: Math.min(...products.map(p => p.sortOrder)),
+      maxOrder: Math.max(...products.map(p => p.sortOrder)),
+      products: products.map(p => ({
+        id: p.id,
+        title: p.title,
+        sortOrder: p.sortOrder
+      }))
+    };
+  }
 }

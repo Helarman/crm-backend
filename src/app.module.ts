@@ -19,6 +19,7 @@ import { DiscountsModule } from './discounts/discounts.module';
 import { NetworkModule } from './network/network.module';
 import { TenantModule } from './tenant/tenant.module';
 import { OrderLogModule } from './order-log/order-log.module';
+import { DictionariesModule } from './dictionaries/dictionaries.module';
 
 @Module({
 	imports: [
@@ -40,6 +41,7 @@ import { OrderLogModule } from './order-log/order-log.module';
 		DiscountsModule,
 		NetworkModule,
 		TenantModule,
+		DictionariesModule,
 		OrderLogModule
 	]
 })

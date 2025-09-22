@@ -121,7 +121,7 @@ export class InventoryItemDto implements Partial<InventoryItem> {
   id: string;
 
   @ApiProperty()
-  name: string;
+  name?: string;
 
   @ApiProperty({ required: false })
   description?: string;
@@ -162,8 +162,11 @@ export class CreateInventoryItemDto {
   cost?: number;
 
   @ApiProperty({ required: false })
+  categoryId?: string; 
+  
+  @ApiProperty({ required: false })
   productId?: string;
-   addToWarehouseId?: string;
+  addToWarehouseId?: string;
   initialQuantity?: number;
 
 }
@@ -232,6 +235,10 @@ export class CreateWarehouseItemDto {
   
   @ApiProperty({ required: false })
   minQuantity?: number;
+
+  @ApiProperty({ required: false })
+  cost?: number;
+
 }
 
 export class UpdateWarehouseItemDto {
@@ -246,6 +253,10 @@ export class UpdateWarehouseItemDto {
 
   @ApiProperty({ required: false })
   minQuantity?: number;
+
+  @ApiProperty({ required: false })
+  cost?: number; 
+
 }
 
 export class InventoryTransactionDto implements Partial<InventoryTransaction> {
@@ -264,6 +275,12 @@ export class InventoryTransactionDto implements Partial<InventoryTransaction> {
   @ApiProperty()
   quantity: number;
 
+  @ApiProperty({ required: false })
+  unitCost?: number;
+
+  @ApiProperty({ required: false })
+  totalCost?: number;
+  
   @ApiProperty()
   previousQuantity: number;
 
@@ -295,7 +312,6 @@ export class PremixDto {
   ingredients: PremixIngredientDto[];
   inventoryItem?: InventoryItemDto;
   
-  // Добавляем поле для warehouseItem конкретного склада
   warehouseItem?: WarehouseItemDto;
 }
   export class WarehousePremixDto extends PremixDto {
@@ -470,7 +486,10 @@ export class CreateInventoryTransactionDto {
   warehouseItemId?: string;
 
   @ApiProperty({ required: false })
-  targetWarehouseId?: string; // Для трансферов
+  targetWarehouseId?: string;
+
+  @ApiProperty({ required: false })
+  unitCost?: number;
 
   @ApiProperty({ enum: InventoryTransactionType })
   type: InventoryTransactionType;
@@ -486,4 +505,79 @@ export class CreateInventoryTransactionDto {
 
   @ApiProperty({ required: false })
   documentId?: string;
+}
+
+export class InventoryCategoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  color?: string;
+
+  @ApiProperty({ required: false })
+  icon?: string;
+
+  @ApiProperty()
+  isActive: boolean;
+
+  @ApiProperty({ required: false })
+  parentId?: string;
+
+  @ApiProperty({ type: [InventoryCategoryDto], required: false })
+  children?: InventoryCategoryDto[];
+
+  @ApiProperty({ type: [InventoryItemDto], required: false })
+  inventoryItems?: InventoryItemDto[];
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}
+
+export class CreateInventoryCategoryDto {
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  color?: string;
+
+  @ApiProperty({ required: false })
+  icon?: string;
+
+  @ApiProperty({ required: false })
+  parentId?: string;
+
+  @ApiProperty({ required: false, default: true })
+  isActive?: boolean;
+}
+
+export class UpdateInventoryCategoryDto {
+  @ApiProperty({ required: false })
+  name?: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  color?: string;
+
+  @ApiProperty({ required: false })
+  icon?: string;
+
+  @ApiProperty({ required: false })
+  parentId?: string;
+
+  @ApiProperty({ required: false })
+  isActive?: boolean;
 }

@@ -7,7 +7,7 @@ export class UpdateOrderItemStatusDto {
   @ApiProperty({ enum: OrderItemStatus })
   @IsEnum(OrderItemStatus)
   status: OrderItemStatus;
-
+  
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

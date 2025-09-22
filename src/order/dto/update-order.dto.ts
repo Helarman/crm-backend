@@ -1,5 +1,6 @@
 import { IsOptional, IsString, IsNumber, IsEnum } from 'class-validator';
 import { EnumOrderType } from '@prisma/client';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateOrderDto {
   @IsOptional()
@@ -17,7 +18,10 @@ export class UpdateOrderDto {
   @IsOptional()
   @IsNumber()
   numberOfPeople?: number;
-
+  
+  @ApiProperty({ required: false })
+  phone?: string;
+  
   @IsOptional()
   @IsString()
   tableNumber?: string;

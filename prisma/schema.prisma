@@ -29,6 +29,11 @@ model User {
   networks      Network[]
   logs          OrderLog[]
 
+  startedItems   OrderItem[]           @relation("OrderItemStartedBy")
+  completedItems OrderItem[]           @relation("OrderItemCompletedBy")
+  pausedItems    OrderItem[]           @relation("OrderItemPausedBy")
+  refundedItems  OrderItem[]           @relation("OrderItemRefundedBy")
+
   @@map("user")
 }
 
@@ -129,7 +134,7 @@ model Product {
   metaDescription String?  @map("meta_description")
   content         String?
   images          String[]
-
+  sortOrder Int @default(0) @map("sort_order")
   additives Additive[] @relation("ProductAdditives")
 
   restaurantPrices RestaurantProductPrice[] @relation("ProductPrices")
@@ -295,7 +300,7 @@ model Order {
   numberOfPeople String?
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
   restaurantId   String          @map("restaurant_id")
-
+  phone          String?         @map("phone")
   shift   Shift?  @relation(fields: [shiftId], references: [id], name: "OrderToShift")
   shiftId String? @map("shift_id")
 
@@ -370,6 +375,18 @@ model OrderItem {
 
   assignedTo   User?   @relation(fields: [assignedToId], references: [id], name: "OrderItemToUser")
   assignedToId String? @map("assigned_to_id")
+
+  startedBy   User?   @relation(fields: [startedById], references: [id], name: "OrderItemStartedBy")
+  startedById String? @map("started_by_id")
+
+  completedBy   User?   @relation(fields: [completedById], references: [id], name: "OrderItemCompletedBy")
+  completedById String? @map("completed_by_id")
+
+  pausedBy   User?   @relation(fields: [pausedById], references: [id], name: "OrderItemPausedBy")
+  pausedById String? @map("paused_by_id")
+
+  refundedBy   User?   @relation(fields: [refundedById], references: [id], name: "OrderItemRefundedBy")
+  refundedById String? @map("refunded_by_id")
 
   additives Additive[] @relation("OrderItemAdditives")
 
@@ -477,8 +494,7 @@ model WarehouseItem {
   reserved Float  @default(0)
   minQuantity Float? @map("min_quantity")
   transactions InventoryTransaction[]
-
-  @@unique([warehouseId, inventoryItemId])
+  cost      Float? 
   @@map("warehouse_items")
 }
 
@@ -507,6 +523,28 @@ model InventoryItem {
   @@map("inventory_items")
   StorageLocation StorageLocation[]
   InventoryTransaction InventoryTransaction[]
+  category   InventoryCategory? @relation(fields: [categoryId], references: [id])
+  categoryId String?            @map("category_id")
+}
+
+model InventoryCategory {
+  id          String           @id @default(cuid())
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  
+  name        String           @unique
+  description String?
+  color       String?          @default("#6b7280")
+  icon        String?
+  isActive    Boolean          @default(true)
+  
+  parentId   String?           @map("parent_id")
+  parent     InventoryCategory? @relation("InventoryCategoryToChildren", fields: [parentId], references: [id])
+  children   InventoryCategory[] @relation("InventoryCategoryToChildren")
+  
+  inventoryItems InventoryItem[]
+  
+  @@map("inventory_categories")
 }
 
 model StorageLocation {
@@ -592,7 +630,8 @@ model InventoryTransaction {
 
   user   User?   @relation(fields: [userId], references: [id])
   userId String? @map("user_id")
-
+  unitCost         Float?
+  totalCost        Float? 
   type             InventoryTransactionType
   quantity         Float
   previousQuantity Float                    @map("previous_quantity")
@@ -779,6 +818,37 @@ model Network {
 
   @@map("networks")
 }
+
+model ReasonWriteOff {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reason_write_offs")
+}
+
+model ReasonReceipt {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reason_receipts")
+}
+
+model ReasonMovement {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reason_movements")
+}
+
 
 enum EnumSurchargeType {
   FIXED

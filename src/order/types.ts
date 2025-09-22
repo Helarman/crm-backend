@@ -4,7 +4,8 @@ export enum OrderItemStatus {
     PARTIALLY_DONE = 'PARTIALLY_DONE',
     PAUSED = 'PAUSED',
     COMPLETED = 'COMPLETED',
-    CANCELLED = 'CANCELLED'
+    CANCELLED = 'CANCELLED',
+    REFUNDED = 'REFUNDED'
   }
   
   export enum OrderStatus {
