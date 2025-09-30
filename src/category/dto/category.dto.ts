@@ -11,19 +11,6 @@ export class CategoryDto {
   @IsNotEmpty({ message: 'Название не может быть пустым' })
   title: string;
 
-  @ApiProperty({
-    example: 'Холодные напитки, чай, кофе и тд.',
-    description: 'Описание категории',
-    required: true,
-  })
-  @ApiProperty({
-    example: 'napitki',
-    description: 'ЧПУ-ссылка категории',
-    required: true,
-  })
-  @IsString()
-  @IsNotEmpty()
-  slug: string;
 
   @ApiProperty({
     example: '/uploads/categories/drinks.jpg',

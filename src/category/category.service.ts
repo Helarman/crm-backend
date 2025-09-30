@@ -25,7 +25,6 @@ export class CategoryService {
     return this.prisma.category.create({
       data: {
         title: dto.title,
-        slug: dto.slug,
         image: dto.image,
         metaTitle: dto.metaTitle,
         metaDescription: dto.metaDescription,
@@ -43,7 +42,6 @@ export class CategoryService {
       where: { id },
       data: {
         title: dto.title,
-        slug: dto.slug,
         image: dto.image,
         metaTitle: dto.metaTitle,
         metaDescription: dto.metaDescription,

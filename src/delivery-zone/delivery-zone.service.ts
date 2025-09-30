@@ -8,8 +8,7 @@ import { DeliveryZoneEntity } from './entities/delivery-zone.entity';
 export class DeliveryZoneService {
   constructor(private readonly prisma: PrismaService) {}
 
-   async create(createDto: CreateDeliveryZoneDto): Promise<DeliveryZoneEntity> {
-    // Проверка существования ресторана
+  async create(createDto: CreateDeliveryZoneDto): Promise<DeliveryZoneEntity> {
     const restaurantExists = await this.prisma.restaurant.findUnique({
       where: { id: createDto.restaurantId }
     });
@@ -18,35 +17,42 @@ export class DeliveryZoneService {
       throw new NotFoundException('Restaurant not found');
     }
 
-    // Валидация полигона
     if (!createDto.polygon) {
       throw new Error('Polygon is required');
     }
 
     try {
-      const zone = await this.prisma.deliveryZone.create({
-        data: {
-          title: createDto.title,
-          price: createDto.price,
-          minOrder: createDto.minOrder,
-          polygon: createDto.polygon, // Храним как WKT-строку
-          restaurantId: createDto.restaurantId
-        }
-      });
+      // Если используете PostGIS, создаем геометрию правильно
+      const zone = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
+        INSERT INTO delivery_zones (title, price, min_order, polygon, restaurant_id)
+        VALUES (
+          ${createDto.title},
+          ${createDto.price},
+          ${createDto.minOrder},
+          ST_GeomFromText(${createDto.polygon}, 4326),
+          ${createDto.restaurantId}
+        )
+        RETURNING 
+          id,
+          title,
+          price,
+          min_order as "minOrder",
+          restaurant_id as "restaurantId",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+      `;
 
-      return new DeliveryZoneEntity(zone);
+      return new DeliveryZoneEntity(zone[0]);
     } catch (error) {
       console.error('Failed to create delivery zone:', error);
       throw new Error('Failed to create delivery zone');
     }
   }
 
-  
   async findAllByRestaurant(restaurantId: string): Promise<DeliveryZoneEntity[]> {
     await this.validateRestaurantExists(restaurantId);
 
     try {
-      // Вариант 1: Если polygon хранится как WKT (Well-Known Text)
       const zones = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
         SELECT 
           id,
@@ -56,7 +62,7 @@ export class DeliveryZoneService {
           restaurant_id as "restaurantId",
           created_at as "createdAt",
           updated_at as "updatedAt",
-          polygon
+          ST_AsText(polygon) as polygon  // Используем ST_AsText вместо ST_AsGeoJSON
         FROM delivery_zones
         WHERE restaurant_id = ${restaurantId}
         ORDER BY created_at DESC
@@ -67,7 +73,7 @@ export class DeliveryZoneService {
       this.handleDatabaseError(error, 'Failed to fetch delivery zones');
     }
   }
-  
+
   async findOne(id: string): Promise<DeliveryZoneEntity> {
     try {
       const [zone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
@@ -79,7 +85,7 @@ export class DeliveryZoneService {
           restaurant_id as "restaurantId",
           created_at as "createdAt",
           updated_at as "updatedAt",
-          ST_AsGeoJSON(polygon) as polygon
+          ST_AsText(polygon) as polygon  // Используем ST_AsText
         FROM delivery_zones
         WHERE id = ${id}
         LIMIT 1
@@ -95,42 +101,69 @@ export class DeliveryZoneService {
     }
   }
 
-async update(
-  id: string,
-  updateDto: UpdateDeliveryZoneDto,
-): Promise<DeliveryZoneEntity> {
-  await this.findOne(id); // Проверка существования
+  async update(
+    id: string,
+    updateDto: UpdateDeliveryZoneDto,
+  ): Promise<DeliveryZoneEntity> {
+    await this.findOne(id);
 
-  try {
-    const polygonUpdate = updateDto.polygon 
-      ? this.prisma.$queryRaw`polygon = ST_GeomFromText(${updateDto.polygon}, 4326)`
-      : this.prisma.$queryRaw``;
+    try {
+      // Динамическое построение запроса обновления
+      const updateFields = [];
+      const values = { id };
 
-    const [updatedZone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
-      UPDATE delivery_zones
-      SET
-        title = ${updateDto.title ?? null},
-        price = ${updateDto.price ?? null},
-        min_order = ${updateDto.minOrder ?? null},
-        ${polygonUpdate},
-        updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING 
-        id,
-        title,
-        price,
-        min_order as "minOrder",
-        restaurant_id as "restaurantId",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
-        ST_AsGeoJSON(polygon) as polygon
-    `;
+      if (updateDto.title !== undefined) {
+        updateFields.push('title = ${title}');
+        values['title'] = updateDto.title;
+      }
+      
+      if (updateDto.price !== undefined) {
+        updateFields.push('price = ${price}');
+        values['price'] = updateDto.price;
+      }
+      
+      if (updateDto.minOrder !== undefined) {
+        updateFields.push('min_order = ${minOrder}');
+        values['minOrder'] = updateDto.minOrder;
+      }
+      
+      if (updateDto.polygon !== undefined) {
+        updateFields.push('polygon = ST_GeomFromText(${polygon}, 4326)');
+        values['polygon'] = updateDto.polygon;
+      }
 
-    return new DeliveryZoneEntity(updatedZone);
-  } catch (error) {
-    this.handleDatabaseError(error, 'Failed to update delivery zone');
+      updateFields.push('updated_at = NOW()');
+
+      if (updateFields.length === 0) {
+        return await this.findOne(id);
+      }
+
+      const updateQuery = `
+        UPDATE delivery_zones
+        SET ${updateFields.join(', ')}
+        WHERE id = ${id}
+        RETURNING 
+          id,
+          title,
+          price,
+          min_order as "minOrder",
+          restaurant_id as "restaurantId",
+          created_at as "createdAt",
+          updated_at as "updatedAt",
+          ST_AsText(polygon) as polygon
+      `;
+
+      const [updatedZone] = await this.prisma.$queryRawUnsafe<DeliveryZoneEntity[]>(
+        updateQuery,
+        values
+      );
+
+      return new DeliveryZoneEntity(updatedZone);
+    } catch (error) {
+      this.handleDatabaseError(error, 'Failed to update delivery zone');
+    }
   }
-}
+
   async remove(id: string): Promise<DeliveryZoneEntity> {
     const zone = await this.findOne(id);
     
@@ -146,7 +179,7 @@ async update(
     }
   }
 
-async findZoneForPoint(
+  async findZoneForPoint(
     restaurantId: string,
     lat: number,
     lng: number,
@@ -156,8 +189,6 @@ async findZoneForPoint(
         throw new Error('Invalid coordinates');
       }
 
-      const pointWkt = `POINT(${lng} ${lat})`;
-      
       const [zone] = await this.prisma.$queryRaw<DeliveryZoneEntity[]>`
         SELECT 
           id,
@@ -167,15 +198,15 @@ async findZoneForPoint(
           restaurant_id as "restaurantId",
           created_at as "createdAt",
           updated_at as "updatedAt",
-          ST_AsGeoJSON(polygon) as polygon
+          ST_AsText(polygon) as polygon
         FROM delivery_zones
         WHERE 
           restaurant_id = ${restaurantId} AND
-          ST_Contains(ST_GeomFromText(polygon::text, 4326), ST_GeomFromText(${pointWkt}, 4326))
+          ST_Contains(polygon, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326))
         LIMIT 1
       `;
 
-      return new DeliveryZoneEntity(zone);
+      return zone ? new DeliveryZoneEntity(zone) : null;
     } catch (error) {
       console.error('Error checking zone coverage:', error);
       throw new Error('Failed to check zone coverage');
@@ -214,5 +245,4 @@ async findZoneForPoint(
 
     throw new InternalServerErrorException(context);
   }
-
 }
