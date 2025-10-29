@@ -66,7 +66,8 @@ export class RestaurantService {
       images: dto.images || [],
       latitude: dto.latitude,
       longitude: dto.longitude,
-      legalInfo: dto.legalInfo, // Added legalInfo field
+      legalInfo: dto.legalInfo,
+      useWarehouse: dto.useWarehouse || false,
       network: {
         connect: { id: dto.networkId }
       }
@@ -88,7 +89,8 @@ export class RestaurantService {
       images: dto.images,
       latitude: dto.latitude,
       longitude: dto.longitude,
-      legalInfo: dto.legalInfo, // Added legalInfo field
+      legalInfo: dto.legalInfo, 
+      useWarehouse: dto.useWarehouse,
       users: undefined,
       id: undefined,
       createdAt: undefined,

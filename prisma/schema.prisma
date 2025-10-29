@@ -98,6 +98,8 @@ model Restaurant {
   network    Network               @relation(fields: [networkId], references: [id])
   networkId  String                @map("network_id")
 
+  useWarehouse Boolean @default(false) @map("use_warehouse")
+
   @@map("restaurant")
 }
 

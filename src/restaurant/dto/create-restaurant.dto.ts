@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ArrayMinSize, IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRestaurantDto {
@@ -74,5 +74,13 @@ export class CreateRestaurantDto {
   @ApiProperty()
   @IsNotEmpty()
   networkId: string;
-  
+
+  @ApiProperty({ 
+    description: 'Использовать складскую систему', 
+    required: false,
+    default: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  useWarehouse?: boolean;
 }
