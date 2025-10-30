@@ -108,39 +108,41 @@ export class DeliveryZoneService {
   }
 
   async findZoneForPoint(
-    restaurantId: string,
-    lat: number,
-    lng: number,
-  ): Promise<DeliveryZoneEntity | null> {
-    try {
-      if (!this.isValidCoordinate(lat, lng)) {
-        throw new Error('Invalid coordinates');
-      }
-      console.log(lat, lng)
-      // Получаем все зоны доставки для ресторана
-      const zones = await this.prisma.deliveryZone.findMany({
-        where: { restaurantId },
-      });
-
-      // Проверяем каждую зону на покрытие точки
-      for (const zone of zones) {
-        if (this.isPointInPolygon(lng, lat, zone.polygon)) {
-          return new DeliveryZoneEntity(zone);
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error checking zone coverage:', error);
-      throw new Error('Failed to check zone coverage');
+  restaurantId: string,
+  lat: number,
+  lng: number,
+): Promise<DeliveryZoneEntity | null> {
+  try {
+    console.log('Searching zone for:', { restaurantId, lat, lng })
+    
+    if (!this.isValidCoordinate(lat, lng)) {
+      throw new Error('Invalid coordinates')
     }
-  }
 
-  // Функция для проверки точки в полигоне (WKT формат)
+    const zones = await this.prisma.deliveryZone.findMany({
+      where: { restaurantId },
+    });
+
+    console.log('Found zones:', zones.length)
+
+    for (const zone of zones) {
+      console.log('Checking zone:', zone.title, zone.price)
+      if (this.isPointInPolygon(lng, lat, zone.polygon)) {
+        console.log('Zone found:', zone)
+        return new DeliveryZoneEntity(zone);
+      }
+    }
+    
+    console.log('No zone found for point')
+    return null;
+  } catch (error) {
+    console.error('Error checking zone coverage:', error);
+    throw new Error('Failed to check zone coverage');
+  }
+}
+
   private isPointInPolygon(lng: number, lat: number, polygonWkt: string): boolean {
     try {
-      // Парсим WKT строку полигона
-      // Формат: POLYGON((lng1 lat1, lng2 lat2, lng3 lat3, lng1 lat1))
       const match = polygonWkt.match(/POLYGON\s*\(\s*\(\s*(.+?)\s*\)\s*\)/i);
       if (!match) {
         console.warn('Invalid polygon format:', polygonWkt);
@@ -157,7 +159,6 @@ export class DeliveryZoneService {
         lat: coord[1]
       }));
 
-      // Проверяем, что полигон замкнут (первая и последняя точки совпадают)
       const firstPoint = polygon[0];
       const lastPoint = polygon[polygon.length - 1];
       if (firstPoint.lng !== lastPoint.lng || firstPoint.lat !== lastPoint.lat) {
@@ -171,7 +172,6 @@ export class DeliveryZoneService {
     }
   }
 
-  // Алгоритм ray casting для проверки точки в полигоне
   private pointInPolygon(point: { lng: number; lat: number }, polygon: { lng: number; lat: number }[]): boolean {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {

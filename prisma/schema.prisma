@@ -922,6 +922,7 @@ enum EnumPaymentMethod {
   CASH
   CARD
   ONLINE
+  CASH_TO_COURIER
   YANDEX // Яндекс оплата (для заказов через Яндекс Еду)
 }
 
