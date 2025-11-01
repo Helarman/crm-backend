@@ -25,7 +25,7 @@ import { CategoryDto } from './dto/category.dto';
 @ApiTags('Категории')
 @Controller('categories')
 export class CategoryController {
-  constructor(private readonly categoryService: CategoryService) {}
+  constructor(private readonly categoryService: CategoryService) { }
 
   @ApiOperation({ summary: 'Получить категорию по ID' })
   @ApiParam({ name: 'id', description: 'ID категории' })
@@ -101,5 +101,52 @@ export class CategoryController {
   @Get('tree')
   async getTree() {
     return this.categoryService.getTree();
+  }
+
+
+  @Post(':id/order')
+  async updateOrder(
+    @Param('id') id: string,
+    @Body() body: { order: number }
+  ) {
+    return this.categoryService.updateOrder(id, body.order);
+  }
+
+  @Post(':id/client-order')
+  async updateClientOrder(
+    @Param('id') id: string,
+    @Body() body: { clientOrder: number }
+  ) {
+    return this.categoryService.updateClientOrder(id, body.clientOrder);
+  }
+
+  @Post(':id/move-up')
+  async moveUp(@Param('id') id: string) {
+    return this.categoryService.moveUp(id);
+  }
+
+  @Post(':id/move-down')
+  async moveDown(@Param('id') id: string) {
+    return this.categoryService.moveDown(id);
+  }
+
+  @Post(':id/move-up-client')
+  async moveUpOnClient(@Param('id') id: string) {
+    return this.categoryService.moveUpOnClient(id);
+  }
+
+  @Post(':id/move-down-client')
+  async moveDownOnClient(@Param('id') id: string) {
+    return this.categoryService.moveDownOnClient(id);
+  }
+
+  @Post('normalize-orders')
+  async normalizeOrders(@Body() body: { parentId?: string }) {
+    return this.categoryService.normalizeOrders(body.parentId);
+  }
+
+  @Post('normalize-client-orders')
+  async normalizeClientOrders(@Body() body: { parentId?: string }) {
+    return this.categoryService.normalizeClientOrders(body.parentId);
   }
 }

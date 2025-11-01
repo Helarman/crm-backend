@@ -20,11 +20,13 @@ import { NetworkModule } from './network/network.module';
 import { TenantModule } from './tenant/tenant.module';
 import { OrderLogModule } from './order-log/order-log.module';
 import { DictionariesModule } from './dictionaries/dictionaries.module';
+import { MigrationModule } from './migration/migration.module';
 
 @Module({
 	imports: [
 		ConfigModule.forRoot(),
 		AuthModule,
+		MigrationModule,
 		UserModule,
 		CategoryModule,
 		RestaurantModule,

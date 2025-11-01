@@ -137,6 +137,8 @@ model Product {
   content         String?
   images          String[]
   sortOrder Int @default(0) @map("sort_order")
+  clientSortOrder Int @default(0) @map("client_sort_order")
+  
   additives Additive[] @relation("ProductAdditives")
 
   restaurantPrices RestaurantProductPrice[] @relation("ProductPrices")
@@ -200,7 +202,8 @@ model Category {
   parent     Category? @relation("CategoryToChildren", fields: [parentId], references: [id])
   children   Category[] @relation("CategoryToChildren")
 
-  order      Int      @default(0)
+  order       Int @default(0)        
+  clientOrder Int @default(0) @map("client_order") 
 
   products   Product[] @relation("ProductToCategory")
 

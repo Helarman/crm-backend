@@ -4,15 +4,15 @@ import { ProductDto } from './dto/product.dto';
 
 @Injectable()
 export class ProductService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getAll(searchTerm?: string) {
     if (searchTerm) return this.getSearchTermFilter(searchTerm);
 
     return this.prisma.product.findMany({
-       orderBy: [
+      orderBy: [
         {
-          sortOrder: 'desc', 
+          sortOrder: 'desc',
         },
         {
           createdAt: 'desc',
@@ -61,7 +61,7 @@ export class ProductService {
           },
         ],
       },
-       orderBy: [
+      orderBy: [
         {
           sortOrder: 'desc',
         },
@@ -102,22 +102,50 @@ export class ProductService {
   }
 
   async create(dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, ...productData } = dto;
-    
-   let finalSortOrder = sortOrder;
-    if (categoryId && sortOrder === undefined) {
-      const maxOrder = await this.prisma.product.aggregate({
-        where: { categoryId },
-        _max: { sortOrder: true }
-      });
-      finalSortOrder = (maxOrder._max.sortOrder || 0) + 1;
-    }
+    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, ...productData } = dto;
+    let finalSortOrder = sortOrder;
+    let finalClientSortOrder = clientSortOrder;
 
+    if (categoryId) {
+      if (sortOrder === undefined) {
+        const maxOrder = await this.prisma.product.aggregate({
+          where: { categoryId },
+          _max: { sortOrder: true }
+        });
+        finalSortOrder = (maxOrder._max.sortOrder || 0) + 1;
+      }
+
+      if (clientSortOrder === undefined) {
+        const maxClientOrder = await this.prisma.product.aggregate({
+          where: { categoryId },
+          _max: { clientSortOrder: true }
+        });
+        finalClientSortOrder = (maxClientOrder._max.clientSortOrder || 0) + 1;
+      }
+    } else {
+      // Для продуктов без категории
+      if (sortOrder === undefined) {
+        const maxOrder = await this.prisma.product.aggregate({
+          where: { categoryId: null },
+          _max: { sortOrder: true }
+        });
+        finalSortOrder = (maxOrder._max.sortOrder || 0) + 1;
+      }
+
+      if (clientSortOrder === undefined) {
+        const maxClientOrder = await this.prisma.product.aggregate({
+          where: { categoryId: null },
+          _max: { clientSortOrder: true }
+        });
+        finalClientSortOrder = (maxClientOrder._max.clientSortOrder || 0) + 1;
+      }
+    }
     // Создаем продукт
     const product = await this.prisma.product.create({
       data: {
         ...productData,
         sortOrder: finalSortOrder,
+        clientSortOrder: finalClientSortOrder,
         description: productData.description || '',
         category: categoryId ? { connect: { id: categoryId } } : undefined,
         additives: additives ? { connect: additives.map(id => ({ id })) } : undefined,
@@ -149,23 +177,43 @@ export class ProductService {
 
     return this.getById(product.id);
   }
-async update(id: string, dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, ...productData } = dto;
-    
+  async update(id: string, dto: ProductDto) {
+    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, ...productData } = dto;
+
     const currentProduct = await this.getById(id);
     const isCategoryChanging = categoryId && currentProduct.categoryId !== categoryId;
 
-     let sortOrderData = {};
-      if (isCategoryChanging && sortOrder === undefined) {
+    let sortOrderData = {};
+    let clientSortOrderData = {};
+
+    if (isCategoryChanging) {
+      // При смене категории устанавливаем порядок в конец новой категории
+      if (sortOrder === undefined) {
         const maxOrder = await this.prisma.product.aggregate({
           where: { categoryId },
           _max: { sortOrder: true }
         });
         sortOrderData = { sortOrder: (maxOrder._max.sortOrder || 0) + 1 };
-      } else if (sortOrder !== undefined) {
+      }
+
+      if (clientSortOrder === undefined) {
+        const maxClientOrder = await this.prisma.product.aggregate({
+          where: { categoryId },
+          _max: { clientSortOrder: true }
+        });
+        clientSortOrderData = { clientSortOrder: (maxClientOrder._max.clientSortOrder || 0) + 1 };
+      }
+    } else {
+      // В той же категории - сохраняем текущий порядок или обновляем если указан
+      if (sortOrder !== undefined) {
         sortOrderData = { sortOrder };
       }
-    
+      if (clientSortOrder !== undefined) {
+        clientSortOrderData = { clientSortOrder };
+      }
+    }
+
+
     // Удаляем старые связи с ингредиентами
     await this.prisma.productIngredient.deleteMany({
       where: { productId: id }
@@ -178,26 +226,27 @@ async update(id: string, dto: ProductDto) {
 
     // Обновляем продукт
     await this.prisma.product.update({
-        where: { id },
-        data: {
-          ...productData,
-          ...sortOrderData,
-          description: productData.description || '',
-          category: categoryId ? { connect: { id: categoryId } } : undefined,
-          additives: additives ? { set: additives.map(id => ({ id })) } : undefined,
-          ingredients: ingredients ? {
-            create: ingredients.map(ing => ({
-              quantity: ing.quantity,
-              inventoryItem: { connect: { id: ing.inventoryItemId } }
-            }))
-          } : undefined,
-          workshops: workshopIds ? {
-            create: workshopIds.map(workshopId => ({
-              workshop: { connect: { id: workshopId } }
-            }))
-          } : undefined,
-        },
-      });
+      where: { id },
+      data: {
+        ...productData,
+        ...sortOrderData,
+        ...clientSortOrderData,
+        description: productData.description || '',
+        category: categoryId ? { connect: { id: categoryId } } : undefined,
+        additives: additives ? { set: additives.map(id => ({ id })) } : undefined,
+        ingredients: ingredients ? {
+          create: ingredients.map(ing => ({
+            quantity: ing.quantity,
+            inventoryItem: { connect: { id: ing.inventoryItemId } }
+          }))
+        } : undefined,
+        workshops: workshopIds ? {
+          create: workshopIds.map(workshopId => ({
+            workshop: { connect: { id: workshopId } }
+          }))
+        } : undefined,
+      },
+    });
 
     // Обновляем цены в ресторанах
     if (restaurantPrices) {
@@ -220,44 +269,44 @@ async update(id: string, dto: ProductDto) {
     return this.getById(id);
   }
 
-async delete(id: string) {
-  await this.getById(id);
+  async delete(id: string) {
+    await this.getById(id);
 
-  await this.prisma.orderItem.deleteMany({
-    where: { productId: id }
-  });
+    await this.prisma.orderItem.deleteMany({
+      where: { productId: id }
+    });
 
-  await this.prisma.productDiscount.deleteMany({
-    where: { productId: id }
-  });
+    await this.prisma.productDiscount.deleteMany({
+      where: { productId: id }
+    });
 
-  await this.prisma.productWorkshop.deleteMany({
-    where: { productId: id }
-  });
+    await this.prisma.productWorkshop.deleteMany({
+      where: { productId: id }
+    });
 
-  await this.prisma.restaurantProductPrice.deleteMany({
-    where: { productId: id },
-  });
+    await this.prisma.restaurantProductPrice.deleteMany({
+      where: { productId: id },
+    });
 
-  await this.prisma.productIngredient.deleteMany({
-    where: { productId: id }
-  });
+    await this.prisma.productIngredient.deleteMany({
+      where: { productId: id }
+    });
 
-  return this.prisma.product.delete({
-    where: { id },
-  });
-}
+    return this.prisma.product.delete({
+      where: { id },
+    });
+  }
   async getByCategory(categoryId: string) {
     return this.prisma.product.findMany({
       where: {
         categoryId,
-        publishedOnWebsite: true 
+        publishedOnWebsite: true
       },
-      
+
       include: {
         restaurantPrices: {
           where: {
-            isStopList: false 
+            isStopList: false
           }
         },
         category: true,
@@ -273,25 +322,157 @@ async delete(id: string) {
           sortOrder: 'desc',
         },
         {
-          createdAt: 'desc', 
+          createdAt: 'desc',
         }
       ],
     });
   }
 
-  async updateSortOrder(id: string, newSortOrder: number) {
+  async updateClientSortOrder(id: string, newClientSortOrder: number) {
     const product = await this.getById(id);
-    
-    if (!product.categoryId) {
-      throw new BadRequestException('Продукт не принадлежит к категории');
+
+    if (newClientSortOrder < 1) {
+      throw new BadRequestException('Порядок не может быть меньше 1');
     }
 
-    // Если пытаемся поставить на место, которое уже занято в этой категории
-    if (newSortOrder !== product.sortOrder) {
-      // Находим продукт в той же категории на этой позиции
+    const whereCondition = product.categoryId
+      ? { categoryId: product.categoryId }
+      : { categoryId: null };
+
+    if (newClientSortOrder !== product.clientSortOrder) {
       const productAtPosition = await this.prisma.product.findFirst({
         where: {
-          categoryId: product.categoryId,
+          ...whereCondition,
+          clientSortOrder: newClientSortOrder,
+          id: { not: id }
+        }
+      });
+
+      if (productAtPosition) {
+        await this.prisma.product.update({
+          where: { id: productAtPosition.id },
+          data: { clientSortOrder: product.clientSortOrder }
+        });
+      }
+    }
+
+    return this.prisma.product.update({
+      where: { id },
+      data: { clientSortOrder: newClientSortOrder },
+      include: {
+        restaurantPrices: true,
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+      },
+    });
+  }
+
+  async getCategoryClientOrderStats(categoryId: string) {
+    const products = await this.prisma.product.findMany({
+      where: { categoryId },
+      select: {
+        id: true,
+        title: true,
+        clientSortOrder: true
+      }
+    });
+
+    return {
+      count: products.length,
+      minOrder: Math.min(...products.map(p => p.clientSortOrder)),
+      maxOrder: Math.max(...products.map(p => p.clientSortOrder)),
+      products: products.map(p => ({
+        id: p.id,
+        title: p.title,
+        clientSortOrder: p.clientSortOrder
+      }))
+    };
+  }
+
+  async moveProductUpOnClient(productId: string, currentCategoryId: string) {
+    const product = await this.getById(productId);
+
+    if (product.clientSortOrder <= 1) {
+      throw new BadRequestException('Продукт уже на первой позиции');
+    }
+
+    return this.updateClientSortOrder(productId, product.clientSortOrder - 1);
+  }
+
+  async moveProductDownOnClient(productId: string, currentCategoryId: string) {
+    const product = await this.getById(productId);
+
+    const stats = await this.getCategoryClientOrderStats(currentCategoryId);
+
+    if (product.clientSortOrder >= stats.maxOrder) {
+      throw new BadRequestException('Продукт уже на последней позиции');
+    }
+
+    return this.updateClientSortOrder(productId, product.clientSortOrder + 1);
+  }
+
+
+  async normalizeCategoryOrders(categoryId?: string) {
+    const whereCondition = categoryId
+      ? { categoryId }
+      : { categoryId: null };
+
+    const products = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    // Перенумеровываем продукты начиная с 1
+    for (let i = 0; i < products.length; i++) {
+      await this.prisma.product.update({
+        where: { id: products[i].id },
+        data: { sortOrder: i + 1 }
+      });
+    }
+
+    return products.length;
+  }
+
+  async normalizeCategoryClientOrders(categoryId?: string) {
+    const whereCondition = categoryId
+      ? { categoryId }
+      : { categoryId: null };
+
+    const products = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { clientSortOrder: 'asc' }
+    });
+
+    for (let i = 0; i < products.length; i++) {
+      await this.prisma.product.update({
+        where: { id: products[i].id },
+        data: { clientSortOrder: i + 1 }
+      });
+    }
+
+    return products.length;
+  }
+  async updateSortOrder(id: string, newSortOrder: number) {
+    const product = await this.getById(id);
+
+    if (newSortOrder < 1) {
+      throw new BadRequestException('Порядок не может быть меньше 1');
+    }
+
+    const whereCondition = product.categoryId
+      ? { categoryId: product.categoryId }
+      : { categoryId: null };
+
+    // Если пытаемся поставить на место, которое уже занято
+    if (newSortOrder !== product.sortOrder) {
+      const productAtPosition = await this.prisma.product.findFirst({
+        where: {
+          ...whereCondition,
           sortOrder: newSortOrder,
           id: { not: id }
         }
@@ -323,7 +504,7 @@ async delete(id: string) {
     });
   }
 
-  
+
   async getRestaurantPrices(productId: string) {
     const prices = await this.prisma.restaurantProductPrice.findMany({
       where: { productId },
@@ -333,7 +514,7 @@ async delete(id: string) {
     });
 
     if (!prices) throw new NotFoundException('Цены не найдены');
-    
+
     return prices.map(price => ({
       restaurantId: price.restaurantId,
       restaurantName: price.restaurant.title,
@@ -343,27 +524,27 @@ async delete(id: string) {
   }
 
   async getIngredients(productId: string) {
-  const ingredients = await this.prisma.productIngredient.findMany({
-    where: { productId },
-    select: {
-      inventoryItemId: true,
-      quantity: true,
-      inventoryItem: {
-        select: {
-          name: true,
-          unit: true
+    const ingredients = await this.prisma.productIngredient.findMany({
+      where: { productId },
+      select: {
+        inventoryItemId: true,
+        quantity: true,
+        inventoryItem: {
+          select: {
+            name: true,
+            unit: true
+          }
         }
       }
-    }
-  });
-  return ingredients.map(i => ({
-    inventoryItemId: i.inventoryItemId,
-    quantity: i.quantity,
-    name: i.inventoryItem.name,
-    unit: i.inventoryItem.unit
-  }));
+    });
+    return ingredients.map(i => ({
+      inventoryItemId: i.inventoryItemId,
+      quantity: i.quantity,
+      name: i.inventoryItem.name,
+      unit: i.inventoryItem.unit
+    }));
   }
-    async togglePrintLabels(id: string) {
+  async togglePrintLabels(id: string) {
     const product = await this.getById(id);
     return this.prisma.product.update({
       where: { id },
@@ -394,5 +575,5 @@ async delete(id: string) {
       data: { isStopList: !product.isStopList },
     });
   }
-  
+
 }

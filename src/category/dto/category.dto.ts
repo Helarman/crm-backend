@@ -59,10 +59,19 @@ export class CategoryDto {
 
   @ApiProperty({
     example: 0,
-    description: 'Порядок сортировки',
+    description: 'Порядок сортировки в админке',
     required: false,
   })
   @IsNumber()
   @IsOptional()
   order?: number;
+
+  @ApiProperty({
+    example: 0,
+    description: 'Порядок сортировки на клиентском сайте',
+    required: false,
+  })
+  @IsNumber()
+  @IsOptional()
+  clientOrder?: number;
 }

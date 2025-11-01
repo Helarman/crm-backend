@@ -18,7 +18,8 @@ export class ProductDto {
   metaDescription?: string;
   tableNumber?: string;
   content?: string;
-  additives?: string[]; // Массив ID добавок
+  additives?: string[];  
+  clientSortOrder?: number
   restaurantPrices?: {
     restaurantId: string;
     price: number;

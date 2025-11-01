@@ -10,13 +10,13 @@ import {
 	Query,
 	UsePipes,
 	ValidationPipe
-  } from '@nestjs/common';
-  import { 
-	ApiTags, 
-	ApiOperation, 
-	ApiResponse, 
-	ApiParam, 
-	ApiBody, 
+} from '@nestjs/common';
+import {
+	ApiTags,
+	ApiOperation,
+	ApiResponse,
+	ApiParam,
+	ApiBody,
 	ApiBearerAuth,
 	ApiQuery,
 	ApiOkResponse,
@@ -24,38 +24,38 @@ import {
 	ApiNotFoundResponse,
 	ApiBadRequestResponse,
 	ApiUnauthorizedResponse
-  } from '@nestjs/swagger';
-  import { Auth } from 'src/auth/decorators/auth.decorator';
-  import { ProductDto } from './dto/product.dto';
-  import { ProductService } from './product.service';
-  
-  @ApiTags('Товары')
-  @ApiBearerAuth()
-  @Controller('products')
-  export class ProductController {
-	constructor(private readonly productService: ProductService) {}
-  
+} from '@nestjs/swagger';
+import { Auth } from 'src/auth/decorators/auth.decorator';
+import { ProductDto } from './dto/product.dto';
+import { ProductService } from './product.service';
+
+@ApiTags('Товары')
+@ApiBearerAuth()
+@Controller('products')
+export class ProductController {
+	constructor(private readonly productService: ProductService) { }
+
 	@Get()
 	@ApiOperation({ summary: 'Получить все товары' })
-	@ApiQuery({ 
-	  name: 'searchTerm', 
-	  required: false,
-	  description: 'Поисковая строка для фильтрации товаров'
+	@ApiQuery({
+		name: 'searchTerm',
+		required: false,
+		description: 'Поисковая строка для фильтрации товаров'
 	})
 	@ApiOkResponse({ description: 'Список товаров успешно получен' })
 	async getAll(@Query('searchTerm') searchTerm?: string) {
-	  return this.productService.getAll(searchTerm);
+		return this.productService.getAll(searchTerm);
 	}
-  
+
 	@Get('by-id/:id')
 	@ApiOperation({ summary: 'Получить товар по ID' })
 	@ApiParam({ name: 'id', description: 'ID товара' })
 	@ApiOkResponse({ description: 'Товар найден' })
 	@ApiNotFoundResponse({ description: 'Товар не найден' })
 	async getById(@Param('id') id: string) {
-	  return this.productService.getById(id);
+		return this.productService.getById(id);
 	}
-  
+
 	@Post()
 	@UsePipes(new ValidationPipe())
 	@HttpCode(200)
@@ -66,9 +66,9 @@ import {
 	@ApiBadRequestResponse({ description: 'Некорректные данные' })
 	@ApiUnauthorizedResponse({ description: 'Не авторизован' })
 	async create(@Body() dto: ProductDto) {
-	  return this.productService.create(dto);
+		return this.productService.create(dto);
 	}
-  
+
 	@Put(':id')
 	@UsePipes(new ValidationPipe())
 	@HttpCode(200)
@@ -80,9 +80,9 @@ import {
 	@ApiNotFoundResponse({ description: 'Товар не найден' })
 	@ApiBadRequestResponse({ description: 'Некорректные данные' })
 	async update(@Param('id') id: string, @Body() dto: ProductDto) {
-	  return this.productService.update(id, dto);
+		return this.productService.update(id, dto);
 	}
-  
+
 	@Delete(':id')
 	@HttpCode(200)
 	@Auth()
@@ -91,7 +91,7 @@ import {
 	@ApiOkResponse({ description: 'Товар успешно удален' })
 	@ApiNotFoundResponse({ description: 'Товар не найден' })
 	async delete(@Param('id') id: string) {
-	  return this.productService.delete(id);
+		return this.productService.delete(id);
 	}
 
 	@Get(':id/prices')
@@ -108,23 +108,23 @@ import {
 	@ApiParam({ name: 'id', description: 'ID продукта' })
 	@ApiOkResponse({ description: 'Ингредиенты найдены' })
 	async getIngredients(@Param('id') id: string) {
-	return this.productService.getIngredients(id);
+		return this.productService.getIngredients(id);
 	}
 
 	@Get('by-category/:categoryId')
 	@ApiOperation({ summary: 'Получить товары по категории' })
-	@ApiParam({ 
-	name: 'categoryId', 
-	description: 'ID категории' 
+	@ApiParam({
+		name: 'categoryId',
+		description: 'ID категории'
 	})
-	@ApiOkResponse({ 
-	description: 'Список товаров категории успешно получен' 
+	@ApiOkResponse({
+		description: 'Список товаров категории успешно получен'
 	})
-	@ApiNotFoundResponse({ 
-	description: 'Категория не найдена' 
+	@ApiNotFoundResponse({
+		description: 'Категория не найдена'
 	})
 	async getByCategory(@Param('categoryId') categoryId: string) {
-	return this.productService.getByCategory(categoryId);
+		return this.productService.getByCategory(categoryId);
 	}
 
 	@Put(':id/toggle-print-labels')
@@ -166,29 +166,53 @@ import {
 	async toggleStopList(@Param('id') id: string) {
 		return this.productService.toggleStopList(id);
 	}
-	
-@Post(':id/sort-order')
-  async updateSortOrder(
-    @Param('id') id: string,
-    @Body() body: { sortOrder: number }
-  ) {
-    return this.productService.updateSortOrder(id, body.sortOrder);
-  }
+
+	@Post(':id/sort-order')
+	async updateSortOrder(
+		@Param('id') id: string,
+		@Body() body: { sortOrder: number }
+	) {
+		return this.productService.updateSortOrder(id, body.sortOrder);
+	}
 
 
 
-  @Get('category/:categoryId/order-stats')
-  async getCategoryOrderStats(@Param('categoryId') categoryId: string) {
-    const products = await this.productService.getByCategory(categoryId);
-    return {
-      count: products.length,
-      minOrder: Math.min(...products.map(p => p.sortOrder)),
-      maxOrder: Math.max(...products.map(p => p.sortOrder)),
-      products: products.map(p => ({
-        id: p.id,
-        title: p.title,
-        sortOrder: p.sortOrder
-      }))
-    };
-  }
+	@Get('category/:categoryId/order-stats')
+	async getCategoryOrderStats(@Param('categoryId') categoryId: string) {
+		const products = await this.productService.getByCategory(categoryId);
+		return {
+			count: products.length,
+			minOrder: Math.min(...products.map(p => p.sortOrder)),
+			maxOrder: Math.max(...products.map(p => p.sortOrder)),
+			products: products.map(p => ({
+				id: p.id,
+				title: p.title,
+				sortOrder: p.sortOrder
+			}))
+		};
+	}
+
+	@Post(':id/client-sort-order')
+	async updateClientSortOrder(
+		@Param('id') id: string,
+		@Body() body: { clientSortOrder: number }
+	) {
+		return this.productService.updateClientSortOrder(id, body.clientSortOrder);
+	}
+
+	@Get('category/:categoryId/client-order-stats')
+	async getCategoryClientOrderStats(@Param('categoryId') categoryId: string) {
+		return this.productService.getCategoryClientOrderStats(categoryId);
+	}
+
+	@Post('normalize-orders')
+	async normalizeOrders(@Body() body: { categoryId?: string }) {
+		return this.productService.normalizeCategoryOrders(body.categoryId);
+	}
+
+	@Post('normalize-client-orders')
+	async normalizeClientOrders(@Body() body: { categoryId?: string }) {
+		return this.productService.normalizeCategoryClientOrders(body.categoryId);
+	}
+
 }
