@@ -1,18 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class DictionaryResponseDto {
-  @ApiProperty({ description: 'ID элемента' })
-  id: number;
+  @ApiProperty()
+  id: string;
 
-  @ApiProperty({ description: 'Наименование' })
+  @ApiProperty()
   name: string;
 
-  @ApiProperty({ description: 'Активен ли элемент' })
+  @ApiProperty()
   isActive: boolean;
 
-  @ApiProperty({ description: 'Дата создания' })
+  @ApiProperty()
+  restaurantId: string;
+
+  @ApiProperty()
   createdAt: Date;
 
-  @ApiProperty({ description: 'Дата обновления' })
+  @ApiProperty()
   updatedAt: Date;
 }

@@ -29,10 +29,10 @@ model User {
   networks      Network[]
   logs          OrderLog[]
 
-  startedItems   OrderItem[]           @relation("OrderItemStartedBy")
-  completedItems OrderItem[]           @relation("OrderItemCompletedBy")
-  pausedItems    OrderItem[]           @relation("OrderItemPausedBy")
-  refundedItems  OrderItem[]           @relation("OrderItemRefundedBy")
+  startedItems   OrderItem[] @relation("OrderItemStartedBy")
+  completedItems OrderItem[] @relation("OrderItemCompletedBy")
+  pausedItems    OrderItem[] @relation("OrderItemPausedBy")
+  refundedItems  OrderItem[] @relation("OrderItemRefundedBy")
 
   @@map("user")
 }
@@ -92,11 +92,17 @@ model Restaurant {
   yandexEdaIntegration YandexEdaIntegration?    @relation("RestaurantToYandexIntegration")
   productPrices        RestaurantProductPrice[] @relation("RestaurantPrices")
   delivery_zones       DeliveryZone[]
-  warehouses Warehouse[]
-  surcharges RestaurantSurcharge[]
-  discounts  RestaurantDiscount[]
-  network    Network               @relation(fields: [networkId], references: [id])
-  networkId  String                @map("network_id")
+  warehouses           Warehouse[]
+  surcharges           RestaurantSurcharge[]
+  discounts            RestaurantDiscount[]
+  network              Network                  @relation(fields: [networkId], references: [id])
+  networkId            String                   @map("network_id")
+
+  writeOffReasons ReasonWriteOff[]
+  receiptReasons  ReasonReceipt[]
+  movementReasons ReasonMovement[]
+  incomeReasons   ReasonIncome[]
+  expenseReasons  ReasonExpense[]
 
   useWarehouse Boolean @default(false) @map("use_warehouse")
 
@@ -136,9 +142,9 @@ model Product {
   metaDescription String?  @map("meta_description")
   content         String?
   images          String[]
-  sortOrder Int @default(0) @map("sort_order")
-  clientSortOrder Int @default(0) @map("client_sort_order")
-  
+  sortOrder       Int      @default(0) @map("sort_order")
+  clientSortOrder Int      @default(0) @map("client_sort_order")
+
   additives Additive[] @relation("ProductAdditives")
 
   restaurantPrices RestaurantProductPrice[] @relation("ProductPrices")
@@ -185,27 +191,27 @@ model Additive {
 }
 
 model Category {
-  id        String    @id @default(cuid())
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   title       String
   description String?
-  slug        String?  @unique
+  slug        String? @unique
   image       String?
 
-  metaTitle       String?  @map("meta_title")
-  metaDescription String?  @map("meta_description")
-  metaKeywords    String?  @map("meta_keywords")
+  metaTitle       String? @map("meta_title")
+  metaDescription String? @map("meta_description")
+  metaKeywords    String? @map("meta_keywords")
 
-  parentId   String?  @map("parent_id")
-  parent     Category? @relation("CategoryToChildren", fields: [parentId], references: [id])
-  children   Category[] @relation("CategoryToChildren")
+  parentId String?    @map("parent_id")
+  parent   Category?  @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToChildren")
 
-  order       Int @default(0)        
-  clientOrder Int @default(0) @map("client_order") 
+  order       Int @default(0)
+  clientOrder Int @default(0) @map("client_order")
 
-  products   Product[] @relation("ProductToCategory")
+  products Product[] @relation("ProductToCategory")
 
   @@map("category")
 }
@@ -306,8 +312,8 @@ model Order {
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
   restaurantId   String          @map("restaurant_id")
   phone          String?         @map("phone")
-  shift   Shift?  @relation(fields: [shiftId], references: [id], name: "OrderToShift")
-  shiftId String? @map("shift_id")
+  shift          Shift?          @relation(fields: [shiftId], references: [id], name: "OrderToShift")
+  shiftId        String?         @map("shift_id")
 
   items   OrderItem[] @relation("OrderToOrderItem")
   payment Payment?    @relation("OrderToPayment")
@@ -461,6 +467,7 @@ model YandexEdaOrder {
 
   @@map("yandex_eda_order")
 }
+
 model Warehouse {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
@@ -474,11 +481,12 @@ model Warehouse {
   isActive    Boolean @default(true)
 
   storageLocations StorageLocation[]
-  warehouseItems  WarehouseItem[]
-  
+  warehouseItems   WarehouseItem[]
+
   incomingTransactions InventoryTransaction[] @relation("TargetWarehouse")
-  @@map("warehouses")
   InventoryTransaction InventoryTransaction[]
+
+  @@map("warehouses")
 }
 
 model WarehouseItem {
@@ -495,11 +503,12 @@ model WarehouseItem {
   storageLocation   StorageLocation? @relation(fields: [storageLocationId], references: [id])
   storageLocationId String?          @map("storage_location_id")
 
-  quantity Float  @default(0)
-  reserved Float  @default(0)
-  minQuantity Float? @map("min_quantity")
+  quantity     Float                  @default(0)
+  reserved     Float                  @default(0)
+  minQuantity  Float?                 @map("min_quantity")
   transactions InventoryTransaction[]
-  cost      Float? 
+  cost         Float?
+
   @@map("warehouse_items")
 }
 
@@ -518,37 +527,37 @@ model InventoryItem {
 
   isActive Boolean @default(true)
 
-  warehouseItems WarehouseItem[]
-  ingredients    ProductIngredient[]
+  warehouseItems   WarehouseItem[]
+  ingredients      ProductIngredient[]
   premixIgredients PremixIngredient[]
 
-  premix   Premix? @relation(fields: [premixId], references: [id])
-  premixId String? @unique @map("premix_id")
+  premix               Premix?                @relation(fields: [premixId], references: [id])
+  premixId             String?                @unique @map("premix_id")
+  StorageLocation      StorageLocation[]
+  InventoryTransaction InventoryTransaction[]
+  category             InventoryCategory?     @relation(fields: [categoryId], references: [id])
+  categoryId           String?                @map("category_id")
 
   @@map("inventory_items")
-  StorageLocation StorageLocation[]
-  InventoryTransaction InventoryTransaction[]
-  category   InventoryCategory? @relation(fields: [categoryId], references: [id])
-  categoryId String?            @map("category_id")
 }
 
 model InventoryCategory {
-  id          String           @id @default(cuid())
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  
-  name        String           @unique
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  name        String  @unique
   description String?
-  color       String?          @default("#6b7280")
+  color       String? @default("#6b7280")
   icon        String?
-  isActive    Boolean          @default(true)
-  
-  parentId   String?           @map("parent_id")
-  parent     InventoryCategory? @relation("InventoryCategoryToChildren", fields: [parentId], references: [id])
-  children   InventoryCategory[] @relation("InventoryCategoryToChildren")
-  
+  isActive    Boolean @default(true)
+
+  parentId String?             @map("parent_id")
+  parent   InventoryCategory?  @relation("InventoryCategoryToChildren", fields: [parentId], references: [id])
+  children InventoryCategory[] @relation("InventoryCategoryToChildren")
+
   inventoryItems InventoryItem[]
-  
+
   @@map("inventory_categories")
 }
 
@@ -566,12 +575,10 @@ model StorageLocation {
   isActive    Boolean @default(true)
 
   inventoryItems InventoryItem[]
+  WarehouseItem  WarehouseItem[]
 
   @@map("storage_locations")
-  WarehouseItem WarehouseItem[]
 }
-
-
 
 model ProductIngredient {
   product         Product       @relation(fields: [productId], references: [id])
@@ -633,10 +640,10 @@ model InventoryTransaction {
   targetWarehouse   Warehouse? @relation(fields: [targetWarehouseId], references: [id], name: "TargetWarehouse")
   targetWarehouseId String?    @map("target_warehouse_id")
 
-  user   User?   @relation(fields: [userId], references: [id])
-  userId String? @map("user_id")
+  user             User?                    @relation(fields: [userId], references: [id])
+  userId           String?                  @map("user_id")
   unitCost         Float?
-  totalCost        Float? 
+  totalCost        Float?
   type             InventoryTransactionType
   quantity         Float
   previousQuantity Float                    @map("previous_quantity")
@@ -825,35 +832,69 @@ model Network {
 }
 
 model ReasonWriteOff {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
 
+  @@unique([name, restaurantId])
   @@map("reason_write_offs")
 }
 
 model ReasonReceipt {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
 
+  @@unique([name, restaurantId])
   @@map("reason_receipts")
 }
 
 model ReasonMovement {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
 
+  @@unique([name, restaurantId])
   @@map("reason_movements")
 }
 
+model ReasonIncome {
+  id           String     @id @default(cuid())
+  name         String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
+
+  @@unique([name, restaurantId])
+  @@map("reason_incomes")
+}
+
+model ReasonExpense {
+  id           String     @id @default(cuid())
+  name         String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
+
+  @@unique([name, restaurantId])
+  @@map("reason_expenses")
+}
 
 enum EnumSurchargeType {
   FIXED
