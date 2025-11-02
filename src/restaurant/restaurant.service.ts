@@ -31,7 +31,27 @@ export class RestaurantService {
         owner: true,
         tenant: true
       }
-    }
+    },
+    mondayOpen: true,
+    mondayClose: true,
+    mondayIsWorking: true,
+    tuesdayOpen: true,
+    tuesdayClose: true,
+    tuesdayIsWorking: true,
+    wednesdayOpen: true,
+    wednesdayClose: true,
+    wednesdayIsWorking: true,
+    thursdayOpen: true,
+    thursdayClose: true,
+    thursdayIsWorking: true,
+    fridayOpen: true,
+    fridayClose: true,
+    fridayIsWorking: true,
+    saturdayOpen: true,
+    saturdayClose: true,
+    saturdayIsWorking: true,
+    sundayOpen: true,
+    sundayClose: true,
   };
 
   async getAll() {
