@@ -13,7 +13,7 @@ import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
 export class RestaurantService {
   constructor(
     private prisma: PrismaService,
-  ) {}
+  ) { }
 
   private includeUsers = {
     users: true
@@ -22,7 +22,7 @@ export class RestaurantService {
   private readonly includeProducts = {
     products: true,
   };
-  
+
   private includeDetails = {
     users: true,
     products: true,
@@ -48,8 +48,7 @@ export class RestaurantService {
 
     if (!restaurant) throw new NotFoundException('Ресторан не найден');
     return restaurant;
-  }                            
-
+  }
   async create(dto: CreateRestaurantDto) {
     const network = await this.prisma.network.findUnique({
       where: { id: dto.networkId }
@@ -68,12 +67,42 @@ export class RestaurantService {
       longitude: dto.longitude,
       legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse || false,
+      shiftCloseTime: dto.shiftCloseTime || new Date('1970-01-01T23:59:00.000Z'),
+      // Часы работы
+      mondayOpen: dto.mondayOpen || new Date('1970-01-01T09:00:00.000Z'),
+      mondayClose: dto.mondayClose || new Date('1970-01-01T18:00:00.000Z'),
+      mondayIsWorking: dto.mondayIsWorking ?? true,
+
+      tuesdayOpen: dto.tuesdayOpen || new Date('1970-01-01T09:00:00.000Z'),
+      tuesdayClose: dto.tuesdayClose || new Date('1970-01-01T18:00:00.000Z'),
+      tuesdayIsWorking: dto.tuesdayIsWorking ?? true,
+
+      wednesdayOpen: dto.wednesdayOpen || new Date('1970-01-01T09:00:00.000Z'),
+      wednesdayClose: dto.wednesdayClose || new Date('1970-01-01T18:00:00.000Z'),
+      wednesdayIsWorking: dto.wednesdayIsWorking ?? true,
+
+      thursdayOpen: dto.thursdayOpen || new Date('1970-01-01T09:00:00.000Z'),
+      thursdayClose: dto.thursdayClose || new Date('1970-01-01T18:00:00.000Z'),
+      thursdayIsWorking: dto.thursdayIsWorking ?? true,
+
+      fridayOpen: dto.fridayOpen || new Date('1970-01-01T09:00:00.000Z'),
+      fridayClose: dto.fridayClose || new Date('1970-01-01T18:00:00.000Z'),
+      fridayIsWorking: dto.fridayIsWorking ?? true,
+
+      saturdayOpen: dto.saturdayOpen,
+      saturdayClose: dto.saturdayClose,
+      saturdayIsWorking: dto.saturdayIsWorking ?? false,
+
+      sundayOpen: dto.sundayOpen,
+      sundayClose: dto.sundayClose,
+      sundayIsWorking: dto.sundayIsWorking ?? false,
+
       network: {
         connect: { id: dto.networkId }
       }
     };
 
-    return this.prisma.restaurant.create({ 
+    return this.prisma.restaurant.create({
       data,
       include: this.includeDetails
     });
@@ -81,7 +110,7 @@ export class RestaurantService {
 
   async update(restaurantId: string, dto: UpdateRestaurantDto) {
     await this.getById(restaurantId);
-    
+
     const data: Prisma.RestaurantUpdateInput = {
       title: dto.title,
       description: dto.description,
@@ -89,8 +118,30 @@ export class RestaurantService {
       images: dto.images,
       latitude: dto.latitude,
       longitude: dto.longitude,
-      legalInfo: dto.legalInfo, 
+      legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse,
+      shiftCloseTime: dto.shiftCloseTime,
+      mondayOpen: dto.mondayOpen,
+      mondayClose: dto.mondayClose,
+      mondayIsWorking: dto.mondayIsWorking,
+      tuesdayOpen: dto.tuesdayOpen,
+      tuesdayClose: dto.tuesdayClose,
+      tuesdayIsWorking: dto.tuesdayIsWorking,
+      wednesdayOpen: dto.wednesdayOpen,
+      wednesdayClose: dto.wednesdayClose,
+      wednesdayIsWorking: dto.wednesdayIsWorking,
+      thursdayOpen: dto.thursdayOpen,
+      thursdayClose: dto.thursdayClose,
+      thursdayIsWorking: dto.thursdayIsWorking,
+      fridayOpen: dto.fridayOpen,
+      fridayClose: dto.fridayClose,
+      fridayIsWorking: dto.fridayIsWorking,
+      saturdayOpen: dto.saturdayOpen,
+      saturdayClose: dto.saturdayClose,
+      saturdayIsWorking: dto.saturdayIsWorking,
+      sundayOpen: dto.sundayOpen,
+      sundayClose: dto.sundayClose,
+      sundayIsWorking: dto.sundayIsWorking,
       users: undefined,
       id: undefined,
       createdAt: undefined,
@@ -106,7 +157,7 @@ export class RestaurantService {
       include: this.includeDetails
     });
   }
-    
+
   async delete(restaurantId: string) {
     await this.getById(restaurantId);
     return this.prisma.restaurant.delete({
@@ -234,7 +285,7 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         products: {
-          include:{
+          include: {
             category: true,
             additives: true,
             restaurantPrices: true,

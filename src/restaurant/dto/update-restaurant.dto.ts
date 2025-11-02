@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateRestaurantDto {
@@ -49,4 +49,119 @@ export class UpdateRestaurantDto {
   @IsOptional()
   @IsBoolean()
   useWarehouse?: boolean;
+
+  @ApiProperty({
+    description: 'Время закрытия смены',
+    required: false,
+    example: '1970-01-01T23:59:00.000Z'
+  })
+  @IsOptional()
+  @IsDateString()
+  shiftCloseTime?: Date;
+
+  // Часы работы по дням недели
+  @ApiProperty({ description: 'Время открытия в понедельник', required: false })
+  @IsOptional()
+  @IsDateString()
+  mondayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в понедельник', required: false })
+  @IsOptional()
+  @IsDateString()
+  mondayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли понедельник', required: false })
+  @IsOptional()
+  @IsBoolean()
+  mondayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия во вторник', required: false })
+  @IsOptional()
+  @IsDateString()
+  tuesdayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия во вторник', required: false })
+  @IsOptional()
+  @IsDateString()
+  tuesdayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли вторник', required: false })
+  @IsOptional()
+  @IsBoolean()
+  tuesdayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия в среду', required: false })
+  @IsOptional()
+  @IsDateString()
+  wednesdayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в среду', required: false })
+  @IsOptional()
+  @IsDateString()
+  wednesdayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли среда', required: false })
+  @IsOptional()
+  @IsBoolean()
+  wednesdayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия в четверг', required: false })
+  @IsOptional()
+  @IsDateString()
+  thursdayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в четверг', required: false })
+  @IsOptional()
+  @IsDateString()
+  thursdayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли четверг', required: false })
+  @IsOptional()
+  @IsBoolean()
+  thursdayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия в пятницу', required: false })
+  @IsOptional()
+  @IsDateString()
+  fridayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в пятницу', required: false })
+  @IsOptional()
+  @IsDateString()
+  fridayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли пятница', required: false })
+  @IsOptional()
+  @IsBoolean()
+  fridayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия в субботу', required: false })
+  @IsOptional()
+  @IsDateString()
+  saturdayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в субботу', required: false })
+  @IsOptional()
+  @IsDateString()
+  saturdayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли суббота', required: false })
+  @IsOptional()
+  @IsBoolean()
+  saturdayIsWorking?: boolean;
+
+  @ApiProperty({ description: 'Время открытия в воскресенье', required: false })
+  @IsOptional()
+  @IsDateString()
+  sundayOpen?: Date;
+
+  @ApiProperty({ description: 'Время закрытия в воскресенье', required: false })
+  @IsOptional()
+  @IsDateString()
+  sundayClose?: Date;
+
+  @ApiProperty({ description: 'Рабочий ли воскресенье', required: false })
+  @IsOptional()
+  @IsBoolean()
+  sundayIsWorking?: boolean;
 }

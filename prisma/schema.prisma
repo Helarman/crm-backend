@@ -85,6 +85,8 @@ model Restaurant {
   longitude   String
   legalInfo   String?  @map("legal_info")
 
+  shiftCloseTime DateTime @default("1970-01-01T23:59:00.000Z") @map("shift_close_time")
+
   users                User[]                   @relation("RestaurantToUser")
   products             Product[]                @relation("RestaurantToProduct")
   shifts               Shift[]                  @relation("RestaurantToShift")
@@ -105,6 +107,34 @@ model Restaurant {
   expenseReasons  ReasonExpense[]
 
   useWarehouse Boolean @default(false) @map("use_warehouse")
+
+  mondayOpen      DateTime? @map("monday_open")
+  mondayClose     DateTime? @map("monday_close")
+  mondayIsWorking Boolean   @default(true) @map("monday_is_working")
+
+  tuesdayOpen      DateTime? @map("tuesday_open")
+  tuesdayClose     DateTime? @map("tuesday_close")
+  tuesdayIsWorking Boolean   @default(true) @map("tuesday_is_working")
+
+  wednesdayOpen      DateTime? @map("wednesday_open")
+  wednesdayClose     DateTime? @map("wednesday_close")
+  wednesdayIsWorking Boolean   @default(true) @map("wednesday_is_working")
+
+  thursdayOpen      DateTime? @map("thursday_open")
+  thursdayClose     DateTime? @map("thursday_close")
+  thursdayIsWorking Boolean   @default(true) @map("thursday_is_working")
+
+  fridayOpen      DateTime? @map("friday_open")
+  fridayClose     DateTime? @map("friday_close")
+  fridayIsWorking Boolean   @default(true) @map("friday_is_working")
+
+  saturdayOpen      DateTime? @map("saturday_open")
+  saturdayClose     DateTime? @map("saturday_close")
+  saturdayIsWorking Boolean   @default(false) @map("saturday_is_working")
+
+  sundayOpen      DateTime? @map("sunday_open")
+  sundayClose     DateTime? @map("sunday_close")
+  sundayIsWorking Boolean   @default(false) @map("sunday_is_working")
 
   @@map("restaurant")
 }
