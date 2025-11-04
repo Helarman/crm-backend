@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EnumOrderType, EnumPaymentMethod, EnumSurchargeType } from '@prisma/client';
+import { IsString } from 'class-validator';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -90,4 +91,10 @@ export class CreateOrderDto {
 
   @ApiProperty({ type: [OrderSurchargeDto], required: false })
   surcharges?: OrderSurchargeDto[];
+}
+
+export class AssignShiftDto {
+  @ApiProperty({ description: 'ID смены' })
+  @IsString()
+  shiftId: string;
 }

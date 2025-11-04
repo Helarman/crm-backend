@@ -21,7 +21,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { OrderService } from './order.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { AssignShiftDto, CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponse } from './dto/order-response.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
@@ -404,4 +404,17 @@ async refundItem(
     );
   }
   
+  @Patch(':id/shift')
+  @ApiOperation({ summary: 'Привязать заказ к смене' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Заказ привязан к смене', 
+    type: OrderResponse 
+  })
+  async assignOrderToShift(
+    @Param('id') id: string,
+    @Body() dto: AssignShiftDto
+  ): Promise<OrderResponse> {
+    return this.orderService.assignOrderToShift(id, dto.shiftId);
+  }
 }

@@ -1732,6 +1732,86 @@ export class OrderService {
     return { restaurant, products, additives, productPrices };
   }
 
+  async assignOrderToShift(
+    orderId: string, 
+    shiftId: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    // Проверяем существование смены
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId }
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    // Проверяем, что смена принадлежит тому же ресторану
+    if (shift.restaurantId !== order.restaurantId) {
+      throw new BadRequestException('Смена не принадлежит ресторану заказа');
+    }
+
+    // Проверяем, что заказ еще не оплачен (если нужно)
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить смену для оплаченного заказа');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        shift: { connect: { id: shiftId } }
+      },
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
+  }
+
   private checkStopList(
     products: { id: string; title: string }[],
     productPrices: { productId: string; isStopList: boolean }[]
