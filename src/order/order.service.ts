@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponse } from './dto/order-response.dto';
@@ -11,6 +11,7 @@ import { UpdateOrderItemDto } from './dto/update-order-item.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateAttentionFlagsDto } from './dto/update-attention-flags.dto';
 import { PaginatedResponse } from './dto/paginated-response.dto';
+import { OrderGateway } from './order.gateway';
 
 function timeStringToISODate(timeStr: string): string {
   const [hours, minutes] = timeStr.split(':').map(Number);
@@ -21,7 +22,12 @@ function timeStringToISODate(timeStr: string): string {
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly prisma: PrismaService) {}
+   @Inject(OrderGateway)
+  private readonly orderGateway: OrderGateway;
+
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
   async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
@@ -101,7 +107,14 @@ export class OrderService {
       return order;
     });
 
-    return this.mapToResponse(order);
+    const response = this.mapToResponse(order);
+    
+    // Отправляем WebSocket уведомление о новом заказе
+    setTimeout(async () => {
+      await this.orderGateway.notifyNewOrder(response);
+    }, 100);
+    
+    return response;
   }
 
   async findById(id: string): Promise<OrderResponse> {
@@ -357,6 +370,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении статуса
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderStatusUpdated(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -415,13 +434,20 @@ export class OrderService {
         break;
     }
 
-  await this.prisma.orderItem.update({
-    where: { id: itemId },
-    data: updateData,
-  });
+    await this.prisma.orderItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
 
-  const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
-  return this.mapToResponse(updatedOrder);
+    const updatedOrder = await this.checkAndUpdateOrderStatus(item.order);
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении статуса элемента
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderItemStatusUpdated(response, itemId);
+    }, 100);
+
+    return response;
   }
 
   async bulkUpdateOrderItemsStatus(
@@ -461,6 +487,12 @@ export class OrderService {
 
     const updatedOrder = await this.checkAndUpdateOrderStatus(order);
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление о массовом обновлении статусов
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -631,6 +663,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -767,6 +805,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -859,6 +903,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -1012,7 +1062,14 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
   }
 
   async removeDiscountFromOrder(orderId: string): Promise<OrderResponse> {
@@ -1077,7 +1134,14 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
   }
 
   async updateOrderItemQuantity(
@@ -1162,7 +1226,14 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
   }
 
   async partialRefundOrderItem(
@@ -1281,72 +1352,30 @@ export class OrderService {
       return updated;
     });
 
-    return this.mapToResponse(updatedOrder);
-  }
+    const response = this.mapToResponse(updatedOrder);
 
+    // Отправляем WebSocket уведомление о возврате
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
 
   async refundOrderItem(
-  orderId: string,
-  itemId: string,
-  reason: string,
-  userId?: string
-): Promise<OrderResponse> {
-  const order = await this.prisma.order.findUnique({
-    where: { id: orderId },
-    include: { 
-      items: {
-        where: { id: itemId },
-        include: { additives: true }
-      },
-      payment: true,
-      restaurant: {
-        include: {
-          network: {
-            include: {
-              tenant: true
-            }
-          }
-        }
-      }
-    },
-  });
-
-  if (!order) {
-    throw new NotFoundException('Заказ не найден');
-  }
-
-  const item = order.items[0];
-  if (!item) {
-    throw new NotFoundException('Позиция заказа не найдена');
-  }
-
-  if (item.isRefund) {
-    throw new BadRequestException('Этот товар уже был возвращен');
-  }
-
-  const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
-  const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
-
-  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-    await prisma.orderItem.update({
-      where: { id: itemId },
-      data: { 
-        isRefund: true,
-        refundReason: reason,
-        status: 'REFUNDED',
-        refundedAt: new Date(),
-        refundedById: userId, // Добавляем информацию о пользователе
-      },
-    });
-
-    const updated = await prisma.order.update({
+    orderId: string,
+    itemId: string,
+    reason: string,
+    userId?: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      data: { 
-        totalAmount: { decrement: itemTotalPrice },
-        isRefund: true,
-      },
-      include: {
-        ...this.getOrderInclude(),
+      include: { 
+        items: {
+          where: { id: itemId },
+          include: { additives: true }
+        },
+        payment: true,
         restaurant: {
           include: {
             network: {
@@ -1359,33 +1388,87 @@ export class OrderService {
       },
     });
 
-    if (order.payment) {
-      await prisma.payment.update({
-        where: { id: order.payment.id },
-        data: { amount: { decrement: itemTotalPrice } },
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    const item = order.items[0];
+    if (!item) {
+      throw new NotFoundException('Позиция заказа не найдена');
+    }
+
+    if (item.isRefund) {
+      throw new BadRequestException('Этот товар уже был возвращен');
+    }
+
+    const additivesPrice = item.additives.reduce((sum, a) => sum + a.price, 0);
+    const itemTotalPrice = (item.price + additivesPrice) * item.quantity;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      await prisma.orderItem.update({
+        where: { id: itemId },
+        data: { 
+          isRefund: true,
+          refundReason: reason,
+          status: 'REFUNDED',
+          refundedAt: new Date(),
+          refundedById: userId, // Добавляем информацию о пользователе
+        },
       });
-    }
 
-    return updated;
-  });
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { 
+          totalAmount: { decrement: itemTotalPrice },
+          isRefund: true,
+        },
+        include: {
+          ...this.getOrderInclude(),
+          restaurant: {
+            include: {
+              network: {
+                include: {
+                  tenant: true
+                }
+              }
+            }
+          }
+        },
+      });
 
-  const response = this.mapToResponse(updatedOrder);
-  return {
-    ...response,
-    restaurant: {
-      ...response.restaurant,
-      legalInfo: updatedOrder.restaurant?.legalInfo,
-      network: updatedOrder.restaurant?.network ? {
-        id: updatedOrder.restaurant.network.id,
-        name: updatedOrder.restaurant.network.name,
-        tenant: updatedOrder.restaurant.network.tenant ? {
-          domain: updatedOrder.restaurant.network.tenant.domain,
-          subdomain: updatedOrder.restaurant.network.tenant.subdomain
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: itemTotalPrice } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление о возврате
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
         } : undefined
-      } : undefined
-    }
-  };
-}
+      }
+    };
+  }
 
   async updateOrder(id: string, dto: UpdateOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
@@ -1460,6 +1543,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -1525,6 +1614,12 @@ export class OrderService {
     });
 
     const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении флагов внимания
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
     return {
       ...response,
       restaurant: {
@@ -1542,6 +1637,514 @@ export class OrderService {
     };
   }
 
+  async applyCustomerToOrder(
+    orderId: string,
+    customerId: string
+  ): Promise<OrderResponse> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Клиент не найден');
+    }
+
+    const order = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        customer: { connect: { id: customerId } },
+      },
+      include: this.getOrderInclude(),
+    });
+
+    const response = this.mapToResponse(order);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async applyCustomerDiscount(
+    orderId: string,
+    discountId: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true, payment: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (!order.customer) {
+      throw new BadRequestException('К заказу не привязан клиент');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    const discount = await this.prisma.discount.findUnique({
+      where: { id: discountId },
+      include: {
+        restaurants: { where: { restaurantId: order.restaurantId } },
+      },
+    });
+
+    if (!discount) {
+      throw new NotFoundException('Скидка не найдена');
+    }
+
+    if (discount.restaurants.length === 0 && discount.targetType !== 'ALL') {
+      throw new BadRequestException(
+        'Скидка не доступна для этого ресторана'
+      );
+    }
+
+    let discountAmount = 0;
+    if (discount.type === 'PERCENTAGE') {
+      discountAmount = Math.floor(
+        (order.totalAmount * discount.value) / 100
+      );
+    } else {
+      discountAmount = discount.value;
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      // Создаем запись о применении скидки
+      await prisma.discountApplication.create({
+        data: {
+          discount: { connect: { id: discountId } },
+          order: { connect: { id: orderId } },
+          customer: { connect: { id: order.customerId! } },
+          amount: discountAmount,
+          description: `Скидка "${discount.title}" применена`,
+        },
+      });
+
+      // Обновляем заказ
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          totalAmount: { decrement: discountAmount },
+          discountAmount: { increment: discountAmount },
+          hasDiscount: true,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      // Обновляем платеж, если он есть
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: discountAmount } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async applyCustomerPoints(
+    orderId: string,
+    points: number
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true, payment: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (!order.customer) {
+      throw new BadRequestException('К заказу не привязан клиент');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    if (points > order.customer.bonusPoints) {
+      throw new BadRequestException(
+        'Недостаточно бонусных баллов у клиента'
+      );
+    }
+
+    // Конвертируем баллы в рубли (например, 1 балл = 1 рубль)
+    const pointsValue = points;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      // Создаем транзакцию списания баллов
+      await prisma.bonusTransaction.create({
+        data: {
+          customer: { connect: { id: order.customerId! } },
+          order: { connect: { id: orderId } },
+          amount: -points,
+          description: `Списание ${points} баллов для заказа #${order.number}`,
+        },
+      });
+
+      // Обновляем баланс клиента
+      await prisma.customer.update({
+        where: { id: order.customerId! },
+        data: { bonusPoints: { decrement: points } },
+      });
+
+      // Обновляем заказ
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          totalAmount: { decrement: pointsValue },
+          bonusPointsUsed: { increment: points },
+        },
+        include: this.getOrderInclude(),
+      });
+
+      // Обновляем платеж, если он есть
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: pointsValue } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async removeCustomerPoints(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true, payment: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (!order.customer) {
+      throw new BadRequestException('К заказу не привязан клиент');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    if (order.bonusPointsUsed <= 0) {
+      return this.mapToResponse(order);
+    }
+
+    const pointsToReturn = order.bonusPointsUsed;
+    const pointsValue = pointsToReturn; // 1 балл = 1 рубль
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      // Создаем транзакцию возврата баллов
+      await prisma.bonusTransaction.create({
+        data: {
+          customer: { connect: { id: order.customerId! } },
+          order: { connect: { id: orderId } },
+          amount: pointsToReturn,
+          description: `Возврат ${pointsToReturn} баллов для заказа #${order.number}`,
+        },
+      });
+
+      // Обновляем баланс клиента
+      await prisma.customer.update({
+        where: { id: order.customerId! },
+        data: { bonusPoints: { increment: pointsToReturn } },
+      });
+
+      // Обновляем заказ
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          totalAmount: { increment: pointsValue },
+          bonusPointsUsed: 0,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      // Обновляем платеж, если он есть
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { increment: pointsValue } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async removeCustomerFromOrder(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payment: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    // Если есть примененные бонусы - сначала их убираем
+    if (order.bonusPointsUsed > 0) {
+      await this.removeCustomerPoints(orderId);
+    }
+
+    // Если есть примененные скидки - убираем их
+    if (order.hasDiscount) {
+      await this.removeCustomerDiscount(orderId);
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        customer: { disconnect: true },
+      },
+      include: this.getOrderInclude(),
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async removeCustomerDiscount(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payment: true, discountApplications: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (!order.hasDiscount) {
+      return this.mapToResponse(order);
+    }
+
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить оплаченный заказ');
+    }
+
+    const discountAmount = order.discountAmount;
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      // Удаляем все применения скидок для этого заказа
+      await prisma.discountApplication.deleteMany({
+        where: { orderId },
+      });
+
+      // Обновляем заказ
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          totalAmount: { increment: discountAmount },
+          discountAmount: 0,
+          hasDiscount: false,
+          discountCanceled: true,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      // Обновляем платеж, если он есть
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { increment: discountAmount } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async applyCustomerPersonalDiscount(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true, payment: true }
+    });
+
+    if (!order?.customer) {
+      throw new BadRequestException('К заказу не привязан клиент');
+    }
+
+    if (!order.customer.personalDiscount || order.customer.personalDiscount <= 0) {
+      throw new BadRequestException('У клиента нет персональной скидки');
+    }
+
+    const discountValue = order.customer.personalDiscount;
+    const discountAmount = Math.floor(order.totalAmount * discountValue / 100);
+
+    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          totalAmount: { decrement: discountAmount },
+          discountAmount: { increment: discountAmount },
+          hasDiscount: true,
+        },
+        include: this.getOrderInclude(),
+      });
+
+      if (order.payment) {
+        await prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { amount: { decrement: discountAmount } },
+        });
+      }
+
+      return updated;
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async assignOrderToShift(
+    orderId: string, 
+    shiftId: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    // Проверяем существование смены
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId }
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    // Проверяем, что смена принадлежит тому же ресторану
+    if (shift.restaurantId !== order.restaurantId) {
+      throw new BadRequestException('Смена не принадлежит ресторану заказа');
+    }
+
+    // Проверяем, что заказ еще не оплачен (если нужно)
+    if (order.payment?.status === 'PAID') {
+      throw new BadRequestException('Нельзя изменить смену для оплаченного заказа');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        shift: { connect: { id: shiftId } }
+      },
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об изменении заказа
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: updatedOrder.restaurant?.legalInfo,
+        network: updatedOrder.restaurant?.network ? {
+          id: updatedOrder.restaurant.network.id,
+          name: updatedOrder.restaurant.network.name,
+          tenant: updatedOrder.restaurant.network.tenant ? {
+            domain: updatedOrder.restaurant.network.tenant.domain,
+            subdomain: updatedOrder.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
+  }
+
+  // Вспомогательные методы остаются без изменений
   private async generateOrderNumber(restaurantId: string): Promise<string> {
     const dateStr = new Date()
       .toLocaleDateString('ru-RU', {
@@ -1651,7 +2254,8 @@ export class OrderService {
 
     return transitions[currentStatus]?.includes(newStatus) || false;
   }
- private async getOrderData(dto: CreateOrderDto) {
+
+  private async getOrderData(dto: CreateOrderDto) {
     const [restaurant, products, additives, productPrices] = await Promise.all([
       this.prisma.restaurant.findUnique({
         where: { id: dto.restaurantId },
@@ -1730,86 +2334,6 @@ export class OrderService {
     }
 
     return { restaurant, products, additives, productPrices };
-  }
-
-  async assignOrderToShift(
-    orderId: string, 
-    shiftId: string
-  ): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { 
-        payment: true,
-        restaurant: {
-          include: {
-            network: {
-              include: {
-                tenant: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    // Проверяем существование смены
-    const shift = await this.prisma.shift.findUnique({
-      where: { id: shiftId }
-    });
-
-    if (!shift) {
-      throw new NotFoundException('Смена не найдена');
-    }
-
-    // Проверяем, что смена принадлежит тому же ресторану
-    if (shift.restaurantId !== order.restaurantId) {
-      throw new BadRequestException('Смена не принадлежит ресторану заказа');
-    }
-
-    // Проверяем, что заказ еще не оплачен (если нужно)
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить смену для оплаченного заказа');
-    }
-
-    const updatedOrder = await this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        shift: { connect: { id: shiftId } }
-      },
-      include: {
-        ...this.getOrderInclude(),
-        restaurant: {
-          include: {
-            network: {
-              include: {
-                tenant: true
-              }
-            }
-          }
-        }
-      },
-    });
-
-    const response = this.mapToResponse(updatedOrder);
-    return {
-      ...response,
-      restaurant: {
-        ...response.restaurant,
-        legalInfo: updatedOrder.restaurant?.legalInfo,
-        network: updatedOrder.restaurant?.network ? {
-          id: updatedOrder.restaurant.network.id,
-          name: updatedOrder.restaurant.network.name,
-          tenant: updatedOrder.restaurant.network.tenant ? {
-            domain: updatedOrder.restaurant.network.tenant.domain,
-            subdomain: updatedOrder.restaurant.network.tenant.subdomain
-          } : undefined
-        } : undefined
-      }
-    };
   }
 
   private checkStopList(
@@ -2049,375 +2573,4 @@ export class OrderService {
       },
     };
   }
-   async applyCustomerToOrder(
-    orderId: string,
-    customerId: string
-  ): Promise<OrderResponse> {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-
-    if (!customer) {
-      throw new NotFoundException('Клиент не найден');
-    }
-
-    const order = await this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        customer: { connect: { id: customerId } },
-      },
-      include: this.getOrderInclude(),
-    });
-
-    return this.mapToResponse(order);
-  }
-
-  async applyCustomerDiscount(
-    orderId: string,
-    discountId: string
-  ): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    const discount = await this.prisma.discount.findUnique({
-      where: { id: discountId },
-      include: {
-        restaurants: { where: { restaurantId: order.restaurantId } },
-      },
-    });
-
-    if (!discount) {
-      throw new NotFoundException('Скидка не найдена');
-    }
-
-    if (discount.restaurants.length === 0 && discount.targetType !== 'ALL') {
-      throw new BadRequestException(
-        'Скидка не доступна для этого ресторана'
-      );
-    }
-
-    let discountAmount = 0;
-    if (discount.type === 'PERCENTAGE') {
-      discountAmount = Math.floor(
-        (order.totalAmount * discount.value) / 100
-      );
-    } else {
-      discountAmount = discount.value;
-    }
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Создаем запись о применении скидки
-      await prisma.discountApplication.create({
-        data: {
-          discount: { connect: { id: discountId } },
-          order: { connect: { id: orderId } },
-          customer: { connect: { id: order.customerId! } },
-          amount: discountAmount,
-          description: `Скидка "${discount.title}" применена`,
-        },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { decrement: discountAmount },
-          discountAmount: { increment: discountAmount },
-          hasDiscount: true,
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: discountAmount } },
-        });
-      }
-
-      return updated;
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
-  async applyCustomerPoints(
-    orderId: string,
-    points: number
-  ): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    if (points > order.customer.bonusPoints) {
-      throw new BadRequestException(
-        'Недостаточно бонусных баллов у клиента'
-      );
-    }
-
-    // Конвертируем баллы в рубли (например, 1 балл = 1 рубль)
-    const pointsValue = points;
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Создаем транзакцию списания баллов
-      await prisma.bonusTransaction.create({
-        data: {
-          customer: { connect: { id: order.customerId! } },
-          order: { connect: { id: orderId } },
-          amount: -points,
-          description: `Списание ${points} баллов для заказа #${order.number}`,
-        },
-      });
-
-      // Обновляем баланс клиента
-      await prisma.customer.update({
-        where: { id: order.customerId! },
-        data: { bonusPoints: { decrement: points } },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { decrement: pointsValue },
-          bonusPointsUsed: { increment: points },
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: pointsValue } },
-        });
-      }
-
-      return updated;
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
-  async removeCustomerPoints(orderId: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    if (order.bonusPointsUsed <= 0) {
-      return this.mapToResponse(order);
-    }
-
-    const pointsToReturn = order.bonusPointsUsed;
-    const pointsValue = pointsToReturn; // 1 балл = 1 рубль
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Создаем транзакцию возврата баллов
-      await prisma.bonusTransaction.create({
-        data: {
-          customer: { connect: { id: order.customerId! } },
-          order: { connect: { id: orderId } },
-          amount: pointsToReturn,
-          description: `Возврат ${pointsToReturn} баллов для заказа #${order.number}`,
-        },
-      });
-
-      // Обновляем баланс клиента
-      await prisma.customer.update({
-        where: { id: order.customerId! },
-        data: { bonusPoints: { increment: pointsToReturn } },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { increment: pointsValue },
-          bonusPointsUsed: 0,
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { increment: pointsValue } },
-        });
-      }
-
-      return updated;
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
-   async removeCustomerFromOrder(orderId: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    // Если есть примененные бонусы - сначала их убираем
-    if (order.bonusPointsUsed > 0) {
-      await this.removeCustomerPoints(orderId);
-    }
-
-    // Если есть примененные скидки - убираем их
-    if (order.hasDiscount) {
-      await this.removeCustomerDiscount(orderId);
-    }
-
-    const updatedOrder = await this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        customer: { disconnect: true },
-      },
-      include: this.getOrderInclude(),
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
-  async removeCustomerDiscount(orderId: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { payment: true, discountApplications: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.hasDiscount) {
-      return this.mapToResponse(order);
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    const discountAmount = order.discountAmount;
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Удаляем все применения скидок для этого заказа
-      await prisma.discountApplication.deleteMany({
-        where: { orderId },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { increment: discountAmount },
-          discountAmount: 0,
-          hasDiscount: false,
-          discountCanceled: true,
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { increment: discountAmount } },
-        });
-      }
-
-      return updated;
-    });
-
-    return this.mapToResponse(updatedOrder);
-  }
-
-  async applyCustomerPersonalDiscount(orderId: string): Promise<OrderResponse> {
-  const order = await this.prisma.order.findUnique({
-    where: { id: orderId },
-    include: { customer: true, payment: true }
-  });
-
-  if (!order?.customer) {
-    throw new BadRequestException('К заказу не привязан клиент');
-  }
-
-  if (!order.customer.personalDiscount || order.customer.personalDiscount <= 0) {
-    throw new BadRequestException('У клиента нет персональной скидки');
-  }
-
-  const discountValue = order.customer.personalDiscount;
-  const discountAmount = Math.floor(order.totalAmount * discountValue / 100);
-
-  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        totalAmount: { decrement: discountAmount },
-        discountAmount: { increment: discountAmount },
-        hasDiscount: true,
-      },
-      include: this.getOrderInclude(),
-    });
-
-    if (order.payment) {
-      await prisma.payment.update({
-        where: { id: order.payment.id },
-        data: { amount: { decrement: discountAmount } },
-      });
-    }
-
-    return updated;
-  });
-
-  return this.mapToResponse(updatedOrder);
-}
 }
