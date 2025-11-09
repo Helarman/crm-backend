@@ -11,7 +11,7 @@ import { Injectable, Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: "https://bejerabu.beget.app",
     credentials: true,
   },
   namespace: '/orders',
