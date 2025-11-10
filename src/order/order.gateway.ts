@@ -14,7 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
     origin: "https://bejerabu.beget.app",
     credentials: true,
   },
-  namespace: '/orders',
+  namespace: '/ordersws',
 })
 @Injectable()
 export class OrderGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
