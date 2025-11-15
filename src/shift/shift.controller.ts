@@ -24,16 +24,19 @@ import {
   import { UpdateShiftStatusDto } from './dto/update-shift-status.dto';
   import { ManageShiftUserDto } from './dto/manage-shift-user.dto';
   import { ManageShiftOrderDto } from './dto/manage-shift-order.dto';
-import { GetShiftsDto } from './dto/get-shifts.dto';
-import { CreateShiftExpenseDto, UpdateShiftExpenseDto } from './dto/shift-expense.dto';
-import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.dto';
-  
+  import { GetShiftsDto } from './dto/get-shifts.dto';
+  import { CreateShiftExpenseDto, UpdateShiftExpenseDto } from './dto/shift-expense.dto';
+  import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.dto';
+  import { ShiftCronService } from './shift-cron.service';
   
   @ApiTags('Смены')
   @ApiBearerAuth()
   @Controller('shifts')
   export class ShiftController {
-    constructor(private readonly shiftService: ShiftService) {}
+    constructor(
+      private readonly shiftService: ShiftService,
+      private readonly shiftCronService: ShiftCronService,
+    ) {}
   
     
     @Get()
@@ -212,4 +215,26 @@ import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.d
     return this.shiftService.updateIncome(incomeId, dto);
   }
 
+   @Get(':id/auto-close-time')
+  @ApiOperation({ summary: 'Получить время автоматического закрытия смены' })
+  @ApiParam({ name: 'id', description: 'ID смены' })
+  @ApiResponse({ status: 200, description: 'Время автоматического закрытия' })
+  @ApiResponse({ status: 404, description: 'Смена не найдена' })
+  async getAutoCloseTime(@Param('id') shiftId: string) {
+    return this.shiftService.getShiftAutoCloseTime(shiftId);
+  }
+
+  @Post('cron/manual-check')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Принудительная проверка закрытия смен (для тестирования)' })
+  @ApiResponse({ status: 200, description: 'Проверка выполнена' })
+  async manualCronCheck() {
+    await this.shiftCronService.manuallyCheckShiftClosure();
+    return { message: 'Проверка автоматического закрытия смен выполнена' };
+  }
+  @Get('cron/debug')
+  @ApiOperation({ summary: 'Отладочная информация по автоматическому закрытию смен' })
+  async getCronDebugInfo() {
+    return this.shiftCronService.debugShiftClosure();
+}
  }

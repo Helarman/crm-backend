@@ -21,10 +21,12 @@ import { TenantModule } from './tenant/tenant.module';
 import { OrderLogModule } from './order-log/order-log.module';
 import { DictionariesModule } from './dictionaries/dictionaries.module';
 import { MigrationModule } from './migration/migration.module';
+import { ScheduleModule } from '@nestjs/schedule'
 
 @Module({
 	imports: [
 		ConfigModule.forRoot(),
+		ScheduleModule.forRoot(),
 		AuthModule,
 		MigrationModule,
 		UserModule,

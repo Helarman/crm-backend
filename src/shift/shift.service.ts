@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { UpdateShiftStatusDto } from './dto/update-shift-status.dto';
@@ -11,13 +11,42 @@ import { CreateShiftIncomeDto, UpdateShiftIncomeDto } from './dto/shift-income.d
 export class ShiftService {
   constructor(private prisma: PrismaService) {}
 
-  async createShift(dto: CreateShiftDto) {
+ async createShift(dto: CreateShiftDto) {
     const restaurant = await this.prisma.restaurant.findUnique({
       where: { id: dto.restaurantId },
+      select: {
+        id: true,
+        shiftCloseTime: true,
+      },
     });
 
     if (!restaurant) {
       throw new NotFoundException('Ресторан не найден');
+    }
+
+    // Если смена создается со статусом STARTED, устанавливаем автоматическое время окончания
+    let endTime = dto.endTime;
+    
+    if (dto.status === 'STARTED' && !endTime) {
+      const startTime = new Date(dto.startTime);
+      const closeTime = restaurant.shiftCloseTime;
+      
+      // Устанавливаем время окончания на основе времени закрытия ресторана
+      const autoEndTime = new Date(startTime);
+      autoEndTime.setHours(
+        closeTime.getHours(),
+        closeTime.getMinutes(),
+        closeTime.getSeconds(),
+        0
+      );
+      
+      // Если автоматическое время окончания раньше времени начала, 
+      // устанавливаем на следующий день
+      if (autoEndTime <= startTime) {
+        autoEndTime.setDate(autoEndTime.getDate() + 1);
+      }
+      
+      endTime = autoEndTime;
     }
 
     return this.prisma.shift.create({
@@ -25,7 +54,7 @@ export class ShiftService {
         restaurantId: dto.restaurantId,
         status: dto.status,
         startTime: dto.startTime,
-        endTime: dto.endTime,
+        endTime: endTime,
         description: dto.description,
       },
       include: {
@@ -38,6 +67,110 @@ export class ShiftService {
       },
     });
   }
+
+  async updateShiftStatus(shiftId: string, dto: UpdateShiftStatusDto) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        restaurant: {
+          select: {
+            shiftCloseTime: true,
+          },
+        },
+      },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    const updateData: any = {
+      status: dto.status,
+    };
+
+    if (dto.status === 'STARTED' && !shift.endTime) {
+      const startTime = shift.startTime;
+      const closeTime = shift.restaurant.shiftCloseTime;
+      
+      const autoEndTime = new Date(startTime);
+      autoEndTime.setHours(
+        closeTime.getHours(),
+        closeTime.getMinutes(),
+        closeTime.getSeconds(),
+        0
+      );
+      
+      if (autoEndTime <= startTime) {
+        autoEndTime.setDate(autoEndTime.getDate() + 1);
+      }
+      
+      updateData.endTime = autoEndTime;
+    }
+    
+    // Если смена закрывается, устанавливаем время окончания
+    if (dto.status === 'COMPLETED' && !shift.endTime) {
+      updateData.endTime = new Date();
+    }
+
+    return this.prisma.shift.update({
+      where: { id: shiftId },
+      data: updateData,
+      include: {
+        restaurant: true,
+        users: {
+          include: {
+            user: true,
+          },
+        }
+      },
+    });
+  }
+
+  async getShiftAutoCloseTime(shiftId: string) {
+    const shift = await this.prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        restaurant: {
+          select: {
+            shiftCloseTime: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    if (shift.status !== 'STARTED') {
+      throw new BadRequestException('Смена уже закрыта или не активна');
+    }
+
+    const startTime = shift.startTime;
+    const closeTime = shift.restaurant.shiftCloseTime;
+    
+    const autoCloseTime = new Date(startTime);
+    autoCloseTime.setHours(
+      closeTime.getHours(),
+      closeTime.getMinutes(),
+      closeTime.getSeconds(),
+      0
+    );
+    
+    if (autoCloseTime <= startTime) {
+      autoCloseTime.setDate(autoCloseTime.getDate() + 1);
+    }
+
+    return {
+      shiftId: shift.id,
+      restaurant: shift.restaurant.title,
+      startTime: shift.startTime,
+      autoCloseTime,
+      restaurantCloseTime: closeTime,
+    };
+  }
+
 
   async getActiveShiftsByRestaurant(restaurantId: string) {
     return this.prisma.shift.findMany({
@@ -60,30 +193,6 @@ export class ShiftService {
     });
   }
   
-  async updateShiftStatus(shiftId: string, dto: UpdateShiftStatusDto) {
-    const shift = await this.prisma.shift.findUnique({
-      where: { id: shiftId },
-    });
-
-    if (!shift) {
-      throw new NotFoundException('Смена не найдена');
-    }
-
-    return this.prisma.shift.update({
-      where: { id: shiftId },
-      data: {
-        status: dto.status,
-      },
-      include: {
-        restaurant: true,
-        users: {
-          include: {
-            user: true,
-          },
-        }
-      },
-    });
-  }
 
   async addUserToShift(shiftId: string, dto: ManageShiftUserDto) {
     const [shift, user] = await Promise.all([
