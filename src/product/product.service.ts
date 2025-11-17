@@ -394,27 +394,6 @@ export class ProductService {
     };
   }
 
-  async moveProductUpOnClient(productId: string, currentCategoryId: string) {
-    const product = await this.getById(productId);
-
-    if (product.clientSortOrder <= 1) {
-      throw new BadRequestException('Продукт уже на первой позиции');
-    }
-
-    return this.updateClientSortOrder(productId, product.clientSortOrder - 1);
-  }
-
-  async moveProductDownOnClient(productId: string, currentCategoryId: string) {
-    const product = await this.getById(productId);
-
-    const stats = await this.getCategoryClientOrderStats(currentCategoryId);
-
-    if (product.clientSortOrder >= stats.maxOrder) {
-      throw new BadRequestException('Продукт уже на последней позиции');
-    }
-
-    return this.updateClientSortOrder(productId, product.clientSortOrder + 1);
-  }
 
 
   async normalizeCategoryOrders(categoryId?: string) {
@@ -575,5 +554,278 @@ export class ProductService {
       data: { isStopList: !product.isStopList },
     });
   }
+
+    async updateProductOrder(productId: string, newOrder: number, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+     if (newOrder < 1) {
+      throw new BadRequestException('Порядок не может быть меньше 1');
+    }
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    // Получаем все продукты в категории
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    if (newOrder > categoryProducts.length) {
+      throw new BadRequestException('Порядок превышает количество продуктов в категории');
+    }
+
+    // Удаляем текущий продукт из списка
+    const productsWithoutCurrent = categoryProducts.filter(p => p.id !== productId);
+    
+    // Вставляем продукт на новую позицию
+      const reorderedProducts = [
+        ...productsWithoutCurrent.slice(0, newOrder - 1),
+        product,
+        ...productsWithoutCurrent.slice(newOrder - 1)
+      ];
+
+    // Обновляем порядок всех продуктов в категории
+      for (let i = 0; i < reorderedProducts.length; i++) {
+        await this.prisma.product.update({
+          where: { id: reorderedProducts[i].id },
+          data: { sortOrder: i + 1 }
+        });
+      }
+
+    return this.getById(productId);
+  }
+
+  async updateClientProductOrder(productId: string, newOrder: number, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+     if (newOrder < 1) {
+      throw new BadRequestException('Порядок не может быть меньше 1');
+    }
+
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    // Получаем все продукты в категории
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { clientSortOrder: 'asc' }
+    });
+
+    if (newOrder > categoryProducts.length) {
+      throw new BadRequestException('Порядок превышает количество продуктов в категории');
+    }
+    // Удаляем текущий продукт из списка
+    const productsWithoutCurrent = categoryProducts.filter(p => p.id !== productId);
+    
+    // Вставляем продукт на новую позицию
+      const reorderedProducts = [
+      ...productsWithoutCurrent.slice(0, newOrder - 1),
+      product,
+      ...productsWithoutCurrent.slice(newOrder - 1)
+    ];
+    // Обновляем клиентский порядок всех продуктов в категории
+   for (let i = 0; i < reorderedProducts.length; i++) {
+      await this.prisma.product.update({
+        where: { id: reorderedProducts[i].id },
+        data: { clientSortOrder: i + 1 }
+      });
+    }
+
+    return this.getById(productId);
+  }
+
+  async moveProductUp(productId: string, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    const currentIndex = categoryProducts.findIndex(p => p.id === productId);
+    
+    if (currentIndex === 0) {
+      throw new BadRequestException('Продукт уже на первой позиции');
+    }
+
+    // Меняем местами с предыдущим продуктом
+    const prevProduct = categoryProducts[currentIndex - 1];
+    
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { sortOrder: prevProduct.sortOrder }
+    });
+
+    await this.prisma.product.update({
+      where: { id: prevProduct.id },
+      data: { sortOrder: product.sortOrder }
+    });
+
+    return this.getById(productId);
+  }
+
+  async moveProductDown(productId: string, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    const currentIndex = categoryProducts.findIndex(p => p.id === productId);
+    
+    if (currentIndex === categoryProducts.length - 1) {
+      throw new BadRequestException('Продукт уже на последней позиции');
+    }
+
+    // Меняем местами со следующим продуктом
+    const nextProduct = categoryProducts[currentIndex + 1];
+    
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { sortOrder: nextProduct.sortOrder }
+    });
+
+    await this.prisma.product.update({
+      where: { id: nextProduct.id },
+      data: { sortOrder: product.sortOrder }
+    });
+
+    return this.getById(productId);
+  }
+
+  async moveProductUpOnClient(productId: string, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { clientSortOrder: 'asc' }
+    });
+
+    const currentIndex = categoryProducts.findIndex(p => p.id === productId);
+    
+    if (currentIndex === 0) {
+      throw new BadRequestException('Продукт уже на первой позиции');
+    }
+
+    // Меняем местами с предыдущим продуктом
+    const prevProduct = categoryProducts[currentIndex - 1];
+    
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { clientSortOrder: prevProduct.clientSortOrder }
+    });
+
+    await this.prisma.product.update({
+      where: { id: prevProduct.id },
+      data: { clientSortOrder: product.clientSortOrder }
+    });
+
+    return this.getById(productId);
+  }
+
+  async moveProductDownOnClient(productId: string, categoryId: string) {
+    const product = await this.getById(productId);
+
+    // Проверяем, что продукт принадлежит указанной категории
+    if (product.categoryId !== categoryId && categoryId !== 'uncategorized') {
+      throw new BadRequestException('Продукт не принадлежит указанной категории');
+    }
+
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    const categoryProducts = await this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: { clientSortOrder: 'asc' }
+    });
+
+    const currentIndex = categoryProducts.findIndex(p => p.id === productId);
+    
+    if (currentIndex === categoryProducts.length - 1) {
+      throw new BadRequestException('Продукт уже на последней позиции');
+    }
+
+    // Меняем местами со следующим продуктом
+    const nextProduct = categoryProducts[currentIndex + 1];
+    
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { clientSortOrder: nextProduct.clientSortOrder }
+    });
+
+    await this.prisma.product.update({
+      where: { id: nextProduct.id },
+      data: { clientSortOrder: product.clientSortOrder }
+    });
+
+    return this.getById(productId);
+  }
+
+  async getCategoryProducts(categoryId: string) {
+    const whereCondition = categoryId === 'uncategorized' 
+      ? { categoryId: null }
+      : { categoryId };
+
+    return this.prisma.product.findMany({
+      where: whereCondition,
+      include: {
+        restaurantPrices: true,
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+      },
+      orderBy: [
+        {
+          sortOrder: 'asc',
+        }
+      ],
+    });
+  }
+
 
 }

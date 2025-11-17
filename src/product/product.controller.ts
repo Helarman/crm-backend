@@ -5,6 +5,7 @@ import {
 	Get,
 	HttpCode,
 	Param,
+	Patch,
 	Post,
 	Put,
 	Query,
@@ -214,5 +215,6 @@ export class ProductController {
 	async normalizeClientOrders(@Body() body: { categoryId?: string }) {
 		return this.productService.normalizeCategoryClientOrders(body.categoryId);
 	}
+
 
 }
