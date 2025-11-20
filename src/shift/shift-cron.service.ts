@@ -13,9 +13,8 @@ export class ShiftCronService {
   async autoCloseShifts() {
     try {
       const now = new Date();
-      this.logger.debug(`Проверка автоматического закрытия смен. Текущее время: ${now.toISOString()}`);
+      this.logger.debug(`Shift auto closing. Time: ${now}`);
 
-      // Находим все активные смены
       const activeShifts = await this.prisma.shift.findMany({
         where: {
           status: 'STARTED',
@@ -34,10 +33,8 @@ export class ShiftCronService {
       let closedCount = 0;
 
       for (const shift of activeShifts) {
-        // Используем ту же логику расчета, что и в ShiftService
         const restaurantCloseTime = shift.restaurant.shiftCloseTime;
         
-        // Создаем время закрытия на основе даты начала смены
         const autoCloseTime = new Date(shift.startTime);
         autoCloseTime.setHours(
           restaurantCloseTime.getHours(),
@@ -46,41 +43,28 @@ export class ShiftCronService {
           0
         );
 
-        // Если автоматическое время окончания раньше времени начала, 
-        // устанавливаем на следующий день
         if (autoCloseTime <= shift.startTime) {
           autoCloseTime.setDate(autoCloseTime.getDate() + 1);
         }
 
-        this.logger.debug(`Смена ${shift.id}: start=${shift.startTime.toISOString()}, autoClose=${autoCloseTime.toISOString()}, now=${now.toISOString()}`);
-
-        // Если текущее время >= времени автоматического закрытия
         if (now >= autoCloseTime) {
           await this.prisma.shift.update({
             where: { id: shift.id },
             data: {
               status: 'COMPLETED',
-              endTime: now, // Используем текущее время, а не расчетное
+              endTime: now, 
             },
           });
 
-          this.logger.log(`Смена ${shift.id} автоматически закрыта. plannedClose=${autoCloseTime.toISOString()}, actualClose=${now.toISOString()}`);
           closedCount++;
         }
       }
 
-      if (closedCount > 0) {
-        this.logger.log(`Автоматически закрыто ${closedCount} смен`);
-      } else {
-        this.logger.debug('Нет смен для автоматического закрытия');
-      }
-
     } catch (error) {
-      this.logger.error('Ошибка при автоматическом закрытии смен:', error);
+      this.logger.error(error);
     }
   }
 
-  // Метод для отладки - показывает какие смены будут закрыты
   async debugShiftClosure() {
     const now = new Date();
     const activeShifts = await this.prisma.shift.findMany({
