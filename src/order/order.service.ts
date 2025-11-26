@@ -393,6 +393,102 @@ export class OrderService {
     };
   }
 
+
+  async cancelAllActiveOrders(restaurantId: string): Promise<OrderResponse[]> {
+  const activeOrders = await this.prisma.order.findMany({
+    where: {
+      restaurantId,
+      status: {
+        notIn: [EnumOrderStatus.CANCELLED, EnumOrderStatus.COMPLETED],
+      },
+    },
+    include: {
+      ...this.getOrderInclude(),
+      restaurant: {
+        include: {
+          network: {
+            include: {
+              tenant: true
+            }
+          }
+        }
+      }
+    },
+  });
+
+  if (activeOrders.length === 0) {
+    return [];
+  }
+
+  const updatedOrders = await this.prisma.$transaction(async (prisma) => {
+    const orderIds = activeOrders.map(order => order.id);
+    
+    await prisma.order.updateMany({
+      where: {
+        id: { in: orderIds }
+      },
+      data: {
+        status: EnumOrderStatus.CANCELLED,
+        updatedAt: new Date()
+      }
+    });
+
+    await prisma.orderItem.updateMany({
+      where: {
+        orderId: { in: orderIds }
+      },
+      data: {
+        status: EnumOrderItemStatus.CANCELLED,
+      }
+    });
+
+    return prisma.order.findMany({
+      where: {
+        id: { in: orderIds }
+      },
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+  });
+
+  const responses = updatedOrders.map(order => {
+    const response = this.mapToResponse(order);
+    return {
+      ...response,
+      restaurant: {
+        ...response.restaurant,
+        legalInfo: order.restaurant?.legalInfo,
+        network: order.restaurant?.network ? {
+          id: order.restaurant.network.id,
+          name: order.restaurant.network.name,
+          tenant: order.restaurant.network.tenant ? {
+            domain: order.restaurant.network.tenant.domain,
+            subdomain: order.restaurant.network.tenant.subdomain
+          } : undefined
+        } : undefined
+      }
+    };
+  });
+
+  setTimeout(async () => {
+    for (const response of responses) {
+      await this.orderGateway.notifyOrderStatusUpdated(response);
+    }
+  }, 100);
+
+  return responses;
+}
+
   async updateOrderItemStatus(
     orderId: string,
     itemId: string,
@@ -2535,6 +2631,7 @@ export class OrderService {
           workshops: item.product.workshops,
           ingredients: item.product.ingredients,
           restaurantPrices: item.product.restaurantPrices,
+          composition: item.product.composition
         },
         quantity: item.quantity,
         comment: item.comment,

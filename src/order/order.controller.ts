@@ -417,4 +417,18 @@ async refundItem(
   ): Promise<OrderResponse> {
     return this.orderService.assignOrderToShift(id, dto.shiftId);
   }
+
+  @Patch('restaurant/:restaurantId/cancel-all-active')
+  @ApiOperation({ summary: 'Завершить все активные заказы ресторана (статус: CANCELLED)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Все активные заказы отменены',
+    type: [OrderResponse],
+  })
+  async cancelAllActiveOrders(
+    @Param('restaurantId') restaurantId: string,
+  ): Promise<OrderResponse[]> {
+    return this.orderService.cancelAllActiveOrders(restaurantId);
+  }
+
 }

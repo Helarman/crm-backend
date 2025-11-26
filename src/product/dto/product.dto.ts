@@ -13,6 +13,7 @@ export class ProductDto {
   publishedInApp?: boolean;
   isStopList?: boolean;
   quantity: number;
+  composition?: string;
   pageTitle?: string;
   workshopIds?: string[];
   metaDescription?: string;

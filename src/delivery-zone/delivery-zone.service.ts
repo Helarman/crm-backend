@@ -8,7 +8,7 @@ import { DeliveryZoneEntity } from './entities/delivery-zone.entity';
 export class DeliveryZoneService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createDto: CreateDeliveryZoneDto): Promise<DeliveryZoneEntity> {
+    async create(createDto: CreateDeliveryZoneDto): Promise<DeliveryZoneEntity> {
     const restaurantExists = await this.prisma.restaurant.findUnique({
       where: { id: createDto.restaurantId }
     });
@@ -28,6 +28,8 @@ export class DeliveryZoneService {
           price: createDto.price,
           minOrder: createDto.minOrder,
           polygon: createDto.polygon,
+          color: createDto.color || '#3B82F6',
+          priority: createDto.priority || 0,
           restaurantId: createDto.restaurantId,
         },
       });
@@ -45,10 +47,13 @@ export class DeliveryZoneService {
     try {
       const zones = await this.prisma.deliveryZone.findMany({
         where: { restaurantId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { priority: 'desc' },
+          { createdAt: 'desc' }
+        ],
       });
 
-      return zones.map(zone => new DeliveryZoneEntity(zone));
+      return zones;
     } catch (error) {
       this.handleDatabaseError(error, 'Failed to fetch delivery zones');
     }
@@ -84,6 +89,8 @@ export class DeliveryZoneService {
           ...(updateDto.price !== undefined && { price: updateDto.price }),
           ...(updateDto.minOrder !== undefined && { minOrder: updateDto.minOrder }),
           ...(updateDto.polygon !== undefined && { polygon: updateDto.polygon }),
+          ...(updateDto.color !== undefined && { color: updateDto.color }),
+          ...(updateDto.priority !== undefined && { priority: updateDto.priority }),
         },
       });
 
@@ -108,38 +115,41 @@ export class DeliveryZoneService {
   }
 
   async findZoneForPoint(
-  restaurantId: string,
-  lat: number,
-  lng: number,
-): Promise<DeliveryZoneEntity | null> {
-  try {
-    console.log('Searching zone for:', { restaurantId, lat, lng })
-    
-    if (!this.isValidCoordinate(lat, lng)) {
-      throw new Error('Invalid coordinates')
-    }
-
-    const zones = await this.prisma.deliveryZone.findMany({
-      where: { restaurantId },
-    });
-
-    console.log('Found zones:', zones.length)
-
-    for (const zone of zones) {
-      console.log('Checking zone:', zone.title, zone.price)
-      if (this.isPointInPolygon(lng, lat, zone.polygon)) {
-        console.log('Zone found:', zone)
-        return new DeliveryZoneEntity(zone);
+    restaurantId: string,
+    lat: number,
+    lng: number,
+  ): Promise<DeliveryZoneEntity | null> {
+    try {
+      console.log('Searching zone for:', { restaurantId, lat, lng })
+      
+      if (!this.isValidCoordinate(lat, lng)) {
+        throw new Error('Invalid coordinates')
       }
+
+      // Получаем зоны отсортированные по приоритету (сначала высокий приоритет)
+      const zones = await this.prisma.deliveryZone.findMany({
+        where: { restaurantId },
+        orderBy: { priority: 'desc' },
+      });
+
+      console.log('Found zones:', zones.length)
+
+      // Проверяем зоны в порядке приоритета
+      for (const zone of zones) {
+        console.log('Checking zone:', zone.title, zone.price, zone.priority)
+        if (this.isPointInPolygon(lng, lat, zone.polygon)) {
+          console.log('Zone found:', zone)
+          return new DeliveryZoneEntity(zone);
+        }
+      }
+      
+      console.log('No zone found for point')
+      return null;
+    } catch (error) {
+      console.error('Error checking zone coverage:', error);
+      throw new Error('Failed to check zone coverage');
     }
-    
-    console.log('No zone found for point')
-    return null;
-  } catch (error) {
-    console.error('Error checking zone coverage:', error);
-    throw new Error('Failed to check zone coverage');
   }
-}
 
   private isPointInPolygon(lng: number, lat: number, polygonWkt: string): boolean {
     try {

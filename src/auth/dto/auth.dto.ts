@@ -1,5 +1,6 @@
 import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { EnumUserRoles } from '@prisma/client';
 
 export class AuthDto {
   @ApiProperty({
@@ -29,4 +30,6 @@ export class AuthDto {
   @MinLength(6, { message: 'Пароль должен содержать не менее 6 символов!' })
   @IsString({ message: 'Пароль обязателен' })
   password: string;
+
+  role?: EnumUserRoles
 }

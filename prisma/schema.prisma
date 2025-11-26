@@ -68,7 +68,8 @@ model DeliveryZone {
   restaurantId String     @map("restaurant_id")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
-
+  color        String?    @default("#3B82F6")
+  priority     Int        @default(0)
   @@map("delivery_zones")
 }
 
@@ -165,7 +166,7 @@ model Product {
   publishedOnWebsite Boolean @default(false) @map("published_on_website")
   publishedInApp     Boolean @default(false) @map("published_in_app")
   isStopList         Boolean @default(false) @map("is_stop_list")
-
+  composition        String?
   workshops ProductWorkshop[]
 
   pageTitle       String?  @map("page_title")

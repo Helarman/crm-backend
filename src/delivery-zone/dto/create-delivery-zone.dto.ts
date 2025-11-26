@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsPositive, IsString, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsPositive, IsString, IsOptional, IsNotEmpty, IsHexColor, Max, Min } from 'class-validator';
 
 export class CreateDeliveryZoneDto {
   @ApiProperty({ example: 'Central District' })
@@ -30,4 +30,26 @@ export class CreateDeliveryZoneDto {
   @IsString()
   @IsNotEmpty()
   restaurantId: string;
+
+    @ApiProperty({ 
+    example: '#3B82F6', 
+    required: false,
+    description: 'HEX color for the zone'
+  })
+  @IsString()
+  @IsHexColor()
+  @IsOptional()
+  color?: string;
+
+  @ApiProperty({ 
+    example: 1, 
+    required: false,
+    description: 'Priority (higher number = higher priority)'
+  })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  priority?: number;
+  
 }

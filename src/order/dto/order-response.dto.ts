@@ -76,6 +76,7 @@ export class OrderResponse {
       title: string;
       price: number;
       image?: string;
+      composition?: string;
       workshops: Array<{
         id: string;
         name: string;
