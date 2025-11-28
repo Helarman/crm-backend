@@ -34,6 +34,7 @@ model User {
   pausedItems    OrderItem[] @relation("OrderItemPausedBy")
   refundedItems  OrderItem[] @relation("OrderItemRefundedBy")
 
+  deliveringOrders Order[] @relation("OrderDeliveryCourier")
   @@map("user")
 }
 
@@ -86,8 +87,11 @@ model Restaurant {
   longitude   String
   legalInfo   String?  @map("legal_info")
 
-  shiftCloseTime DateTime @default("1970-01-01T23:59:00.000Z") @map("shift_close_time")
+  allowNegativeStock Boolean @default(false) @map("allow_negative_stock")
+  acceptOrders       Boolean @default(true) @map("accept_orders")
 
+  shiftCloseTime DateTime @default("1970-01-01T23:59:00.000Z") @map("shift_close_time")
+  paymentIntegrations PaymentIntegration[]
   users                User[]                   @relation("RestaurantToUser")
   products             Product[]                @relation("RestaurantToProduct")
   shifts               Shift[]                  @relation("RestaurantToShift")
@@ -366,13 +370,16 @@ model Order {
   bonusPointsUsed   Float              @default(0) @map("bonus_points_used")
   bonusPointsEarned Float              @default(0) @map("bonus_points_earned")
 
-  // Флаги внимания
-  isReordered      Boolean    @default(false) @map("is_reordered") // Дозаказ
-  hasDiscount      Boolean    @default(false) @map("has_discount") // Применена скидка
-  discountCanceled Boolean    @default(false) @map("discount_canceled") // Отменена скидка
-  isPrecheck       Boolean    @default(false) @map("is_precheck") // Пречек
-  isRefund         Boolean    @default(false) @map("is_refund") // Возврат
+  isReordered      Boolean    @default(false) @map("is_reordered") 
+  hasDiscount      Boolean    @default(false) @map("has_discount") 
+  discountCanceled Boolean    @default(false) @map("discount_canceled") 
+  isPrecheck       Boolean    @default(false) @map("is_precheck")
+  isRefund         Boolean    @default(false) @map("is_refund") 
   logs             OrderLog[]
+
+  deliveryStartedAt DateTime?       @map("delivery_started_at")
+  deliveryCourier   User?           @relation("OrderDeliveryCourier", fields: [deliveryCourierId], references: [id])
+  deliveryCourierId String?         @map("delivery_courier_id")
 
   @@map("orders")
 }
@@ -452,6 +459,70 @@ model OrderSurcharge {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("order_surcharges")
+}
+
+model PaymentIntegration {
+  id          String              @id @default(cuid())
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  
+  // Основная информация
+  name        String              // Человекочитаемое название (например: "Основная ЮKassa")
+  provider    PaymentProviderType // Тип платежной системы
+  isActive    Boolean             @default(true) @map("is_active")
+  isTestMode  Boolean             @default(true) @map("is_test_mode")
+  
+  // Привязка к ресторану
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String     @map("restaurant_id")
+  
+  // Статусы токенов (для провайдеров с OAuth)
+  tokenExpiresAt   DateTime? @map("token_expires_at")
+  lastTokenUpdate  DateTime? @map("last_token_update")
+  
+  // === ПОЛЯ ДЛЯ РАЗНЫХ ПРОВАЙДЕРОВ ===
+  
+  // ЮKassa
+  yookassaShopId    String? @map("yookassa_shop_id")
+  yookassaSecretKey String? @map("yookassa_secret_key")
+  
+  // CloudPayments
+  cloudpaymentsPublicId  String? @map("cloudpayments_public_id")
+  cloudpaymentsApiSecret String? @map("cloudpayments_api_secret")
+  
+  // Сбербанк
+  sberbankLogin         String? @map("sberbank_login")
+  sberbankPassword      String? @map("sberbank_password")
+  sberbankToken         String? @map("sberbank_token")
+  sberbankMerchantLogin String? @map("sberbank_merchant_login")
+  
+  // Альфа-банк
+  alfabankLogin              String? @map("alfabank_login")
+  alfabankPassword           String? @map("alfabank_password")
+  alfabankToken              String? @map("alfabank_token")
+  alfabankRefreshToken       String? @map("alfabank_refresh_token")
+  alfabankGatewayMerchantId  String? @map("alfabank_gateway_merchant_id")
+  alfabankRestApiUrl         String? @map("alfabank_rest_api_url")
+  
+  // СБП
+  sbpMerchantId   String? @map("sbp_merchant_id")
+  sbpSecretKey    String? @map("sbp_secret_key")
+  sbpBankName     String? @map("sbp_bank_name")
+  sbpApiUrl       String? @map("sbp_api_url")
+  sbpQrIssuerId   String? @map("sbp_qr_issuer_id")
+  
+  // Тинькофф
+  tinkoffTerminalKey  String? @map("tinkoff_terminal_key")
+  tinkoffPassword     String? @map("tinkoff_password")
+  
+  // Дополнительные настройки
+  webhookUrl      String? @map("webhook_url")
+  successUrl      String? @map("success_url")
+  failUrl         String? @map("fail_url")
+  
+  // Валидация - проверяем, что заполнены поля для активного провайдера
+  @@map("payment_integrations")
+  @@unique([restaurantId, provider], name: "unique_provider_per_restaurant")
 }
 
 model Payment {
@@ -998,7 +1069,7 @@ enum EnumPaymentMethod {
   CARD
   ONLINE
   CASH_TO_COURIER
-  YANDEX // Яндекс оплата (для заказов через Яндекс Еду)
+  YANDEX
 }
 
 enum EnumShiftStatus {
@@ -1037,4 +1108,13 @@ enum DayOfWeek {
   FRIDAY
   SATURDAY
   SUNDAY
+}
+
+enum PaymentProviderType {
+  YOOKASSA
+  CLOUDPAYMENTS
+  SBERBANK
+  ALFABANK
+  SBP
+  TINKOFF
 }

@@ -75,6 +75,7 @@ export class OrderResponse {
       id: string;
       title: string;
       price: number;
+      printLabels;
       image?: string;
       composition?: string;
       workshops: Array<{
@@ -107,10 +108,15 @@ export class OrderResponse {
     status: EnumPaymentStatus;
     externalId?: string;
   };
-  delivery?: {
+   delivery?: {
     address: string;
     time?: Date;
     notes?: string;
+    startedAt?: Date;       
+    courier?: { 
+      id: string;
+      name: string;
+    };
   };
   totalPrice: number;
   totalAmount: number;
@@ -130,4 +136,5 @@ export class OrderResponse {
     isPrecheck: boolean;
     isRefund: boolean;
   };
+  restaurnat?: any
 }

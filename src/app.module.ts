@@ -22,6 +22,7 @@ import { OrderLogModule } from './order-log/order-log.module';
 import { DictionariesModule } from './dictionaries/dictionaries.module';
 import { MigrationModule } from './migration/migration.module';
 import { ScheduleModule } from '@nestjs/schedule'
+import { PaymentIntegrationModule } from './payment-integration/payment-integration.module';
 
 @Module({
 	imports: [
@@ -46,7 +47,8 @@ import { ScheduleModule } from '@nestjs/schedule'
 		NetworkModule,
 		TenantModule,
 		DictionariesModule,
-		OrderLogModule
+		OrderLogModule,
+		PaymentIntegrationModule
 	]
 })
 export class AppModule {}

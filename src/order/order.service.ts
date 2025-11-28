@@ -606,10 +606,139 @@ export class OrderService {
     };
   }
 
-  async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
+async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
+  console.log('1. Начало addItemToOrder');
+  
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: { 
+      restaurant: {
+        include: {
+          network: {
+            include: {
+              tenant: true
+            }
+          }
+        }
+      }, 
+      payment: true,
+      items: {
+        where: {
+          status: {
+            not: 'CANCELLED'
+          }
+        }
+      }
+    },
+  });
+
+  if (!order || !order.restaurant) {
+    throw new NotFoundException('Заказ или ресторан не найден');
+  }
+
+  if (order.payment?.status === 'PAID') {
+    throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
+  }
+
+  const product = await this.prisma.product.findUnique({
+    where: { id: dto.productId },
+  });
+
+  if (!product) {
+    throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
+  }
+
+  const productInRestaurant = await this.prisma.product.count({
+    where: {
+      id: dto.productId,
+      restaurants: { some: { id: order.restaurant.id } }
+    }
+  });
+
+  if (!productInRestaurant) {
+    throw new BadRequestException(
+      `Продукт "${product.title}" не доступен в ресторане "${order.restaurant.title}"`
+    );
+  }
+
+  let productPrice = await this.prisma.restaurantProductPrice.findFirst({
+    where: {
+      productId: dto.productId,
+      restaurantId: order.restaurant.id,
+    },
+  });
+
+  if (!productPrice) {
+    productPrice = await this.prisma.restaurantProductPrice.create({
+      data: {
+        productId: dto.productId,
+        restaurantId: order.restaurant.id,
+        price: product.price, 
+        isStopList: false
+      }
+    });
+  }
+
+  if (productPrice.isStopList) {
+    throw new BadRequestException(
+      `Продукт "${product.title}" в стоп-листе ресторана "${order.restaurant.title}"`
+    );
+  }
+
+  const additives = dto.additiveIds?.length 
+    ? await this.prisma.additive.findMany({
+        where: { id: { in: dto.additiveIds } }
+      })
+    : [];
+
+  if (dto.additiveIds?.length && additives.length !== dto.additiveIds.length) {
+    const missingIds = dto.additiveIds.filter(id => 
+      !additives.some(a => a.id === id)
+    );
+    throw new NotFoundException(
+      `Не найдены Модификаторы с ID: ${missingIds.join(', ')}`
+    );
+  }
+
+  const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
+  const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
+
+  const hasConfirmedItems = order.items.some(item => 
+    item.status !== 'CREATED' && item.status !== 'CANCELLED'
+  );
+
+
+  try {
+    if (hasConfirmedItems) {
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { isReordered: true },
+      });
+    }
+
+    const newItem = await this.prisma.orderItem.create({
+      data: {
+        order: { connect: { id: orderId } },
+        product: { connect: { id: dto.productId } },
+        quantity: dto.quantity,
+        price: productPrice.price,
+        comment: dto.comment,
+        status: 'CREATED',
+        isReordered: hasConfirmedItems,
+        additives: dto.additiveIds?.length 
+          ? { connect: dto.additiveIds.map(id => ({ id })) }
+          : undefined,
+      },
+    });
+
+    const updatedOrder = await this.prisma.order.update({
       where: { id: orderId },
-      include: { 
+      data: { 
+        totalAmount: { increment: itemPrice },
+        status: order.status === 'COMPLETED' ? 'CONFIRMED' : order.status,
+      },
+      include: {
+        ...this.getOrderInclude(),
         restaurant: {
           include: {
             network: {
@@ -618,149 +747,21 @@ export class OrderService {
               }
             }
           }
-        }, 
-        payment: true,
-        items: {
-          where: {
-            status: {
-              not: 'CANCELLED'
-            }
-          }
         }
       },
     });
 
-    if (!order || !order.restaurant) {
-      throw new NotFoundException('Заказ или ресторан не найден');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
-    }
-
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
-    });
-
-    if (!product) {
-      throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
-    }
-
-    const productInRestaurant = await this.prisma.product.count({
-      where: {
-        id: dto.productId,
-        restaurants: { some: { id: order.restaurant.id } }
-      }
-    });
-
-    if (!productInRestaurant) {
-      throw new BadRequestException(
-        `Продукт "${product.title}" не доступен в ресторане "${order.restaurant.title}"`
-      );
-    }
-
-    let productPrice = await this.prisma.restaurantProductPrice.findFirst({
-      where: {
-        productId: dto.productId,
-        restaurantId: order.restaurant.id,
-      },
-    });
-
-    if (!productPrice) {
-      productPrice = await this.prisma.restaurantProductPrice.create({
-        data: {
-          productId: dto.productId,
-          restaurantId: order.restaurant.id,
-          price: product.price, 
-          isStopList: false
-        }
+    if (order.payment) {
+      await this.prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { amount: { increment: itemPrice } },
       });
     }
 
-    if (productPrice.isStopList) {
-      throw new BadRequestException(
-        `Продукт "${product.title}" в стоп-листе ресторана "${order.restaurant.title}"`
-      );
-    }
-
-    const additives = dto.additiveIds?.length 
-      ? await this.prisma.additive.findMany({
-          where: { id: { in: dto.additiveIds } }
-        })
-      : [];
-
-    if (dto.additiveIds?.length && additives.length !== dto.additiveIds.length) {
-      const missingIds = dto.additiveIds.filter(id => 
-        !additives.some(a => a.id === id)
-      );
-      throw new NotFoundException(
-        `Не найдены Модификаторы с ID: ${missingIds.join(', ')}`
-      );
-    }
-
-    const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
-    const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
-
-    const hasConfirmedItems = order.items.some(item => 
-      item.status !== 'CREATED' && item.status !== 'CANCELLED'
-    );
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      if (hasConfirmedItems) {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { isReordered: true },
-        });
-      }
-
-      const newItem = await prisma.orderItem.create({
-        data: {
-          order: { connect: { id: orderId } },
-          product: { connect: { id: dto.productId } },
-          quantity: dto.quantity,
-          price: productPrice.price,
-          comment: dto.comment,
-          status: 'CREATED',
-          isReordered: hasConfirmedItems,
-          additives: dto.additiveIds?.length 
-            ? { connect: dto.additiveIds.map(id => ({ id })) }
-            : undefined,
-        },
-      });
-
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: { 
-          totalAmount: { increment: itemPrice },
-          status: order.status === 'COMPLETED' ? 'CONFIRMED' : order.status,
-        },
-        include: {
-          ...this.getOrderInclude(),
-          restaurant: {
-            include: {
-              network: {
-                include: {
-                  tenant: true
-                }
-              }
-            }
-          }
-        },
-      });
-
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { increment: itemPrice } },
-        });
-      }
-
-      return updated;
-    });
 
     const response = this.mapToResponse(updatedOrder);
 
-    // Отправляем WebSocket уведомление об изменении заказа
+    // WebSocket уведомление
     setTimeout(async () => {
       await this.orderGateway.notifyOrderModified(response);
     }, 100);
@@ -780,7 +781,13 @@ export class OrderService {
         } : undefined
       }
     };
+
+  } catch (error) {
+    console.error('Ошибка при добавлении товара:', error);
+    console.error('Stack trace:', error.stack);
+    throw error;
   }
+}
 
   async updateOrderItem(
     orderId: string,
@@ -2240,7 +2247,385 @@ export class OrderService {
     };
   }
 
-  // Вспомогательные методы остаются без изменений
+    async assignCourierToDelivery(
+    orderId: string,
+    courierId: string
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    // Проверяем, что заказ типа доставка
+    if (order.type !== 'DELIVERY') {
+      throw new BadRequestException('Курьер может быть назначен только для заказов доставки');
+    }
+
+    // Проверяем существование курьера и его роль
+    const courier = await this.prisma.user.findFirst({
+      where: { 
+        id: courierId,
+       
+      }
+    });
+
+    if (!courier) {
+      throw new NotFoundException('Курьер не найден');
+    }
+
+    const updateData: any = {
+      deliveryCourier: { connect: { id: courierId } }
+    };
+
+    // Если доставка еще не начата, устанавливаем время начала
+    if (!order.deliveryStartedAt && order.status === 'READY') {
+      updateData.deliveryStartedAt = new Date();
+      updateData.status = 'DELIVERING';
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: {
+        ...this.getOrderInclude(),
+        deliveryCourier: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление о назначении курьера
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async startDelivery(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.type !== 'DELIVERY') {
+      throw new BadRequestException('Только заказы доставки могут быть начаты');
+    }
+
+    if (order.status !== 'READY') {
+      throw new BadRequestException('Доставка может быть начата только для заказов со статусом READY');
+    }
+
+    if (order.deliveryStartedAt) {
+      throw new BadRequestException('Доставка уже начата');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        deliveryStartedAt: new Date(),
+        status: 'DELIVERING',
+      },
+      include: {
+        ...this.getOrderInclude(),
+        deliveryCourier: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление о начале доставки
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderStatusUpdated(response);
+    }, 100);
+
+    return response;
+  }
+
+  async completeDelivery(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (order.type !== 'DELIVERY') {
+      throw new BadRequestException('Только заказы доставки могут быть завершены');
+    }
+
+    if (order.status !== 'DELIVERING') {
+      throw new BadRequestException('Доставка может быть завершена только для заказов со статусом DELIVERING');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'COMPLETED',
+      },
+      include: {
+        ...this.getOrderInclude(),
+        deliveryCourier: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление о завершении доставки
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderStatusUpdated(response);
+    }, 100);
+
+    return response;
+  }
+
+  async removeCourierFromDelivery(orderId: string): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { 
+        payment: true,
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundException('Заказ не найден');
+    }
+
+    if (!order.deliveryCourierId) {
+      return this.mapToResponse(order);
+    }
+
+    if (order.status === 'DELIVERING') {
+      throw new BadRequestException('Нельзя удалить курьера из активной доставки');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        deliveryCourier: { disconnect: true },
+        deliveryStartedAt: null, // Сбрасываем время начала доставки
+      },
+      include: {
+        ...this.getOrderInclude(),
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    const response = this.mapToResponse(updatedOrder);
+
+    // Отправляем WebSocket уведомление об удалении курьера
+    setTimeout(async () => {
+      await this.orderGateway.notifyOrderModified(response);
+    }, 100);
+
+    return response;
+  }
+
+  async getDeliveryOrders(restaurantId?: string): Promise<OrderResponse[]> {
+    const where: any = {
+      type: 'DELIVERY',
+      status: {
+        in: ['READY', 'DELIVERING']
+      }
+    };
+
+    if (restaurantId) {
+      where.restaurantId = restaurantId;
+    }
+
+    const orders = await this.prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        ...this.getOrderInclude(),
+        deliveryCourier: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return orders.map(order => {
+      const response = this.mapToResponse(order);
+      return {
+        ...response,
+        restaurant: {
+          ...response.restaurant,
+          legalInfo: order.restaurant?.legalInfo,
+          network: order.restaurant?.network ? {
+            id: order.restaurant.network.id,
+            name: order.restaurant.network.name,
+            tenant: order.restaurant.network.tenant ? {
+              domain: order.restaurant.network.tenant.domain,
+              subdomain: order.restaurant.network.tenant.subdomain
+            } : undefined
+          } : undefined
+        }
+      };
+    });
+  }
+
+  async getCourierActiveDeliveries(courierId: string): Promise<OrderResponse[]> {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        deliveryCourierId: courierId,
+        type: 'DELIVERY',
+        status: 'DELIVERING'
+      },
+      orderBy: { deliveryStartedAt: 'asc' },
+      include: {
+        ...this.getOrderInclude(),
+        deliveryCourier: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        restaurant: {
+          include: {
+            network: {
+              include: {
+                tenant: true
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return orders.map(order => {
+      const response = this.mapToResponse(order);
+      return {
+        ...response,
+        restaurant: {
+          ...response.restaurant,
+          legalInfo: order.restaurant?.legalInfo,
+          network: order.restaurant?.network ? {
+            id: order.restaurant.network.id,
+            name: order.restaurant.network.name,
+            tenant: order.restaurant.network.tenant ? {
+              domain: order.restaurant.network.tenant.domain,
+              subdomain: order.restaurant.network.tenant.subdomain
+            } : undefined
+          } : undefined
+        }
+      };
+    });
+  }
+
   private async generateOrderNumber(restaurantId: string): Promise<string> {
     const dateStr = new Date()
       .toLocaleDateString('ru-RU', {
@@ -2470,6 +2855,7 @@ export class OrderService {
     }, 0);
   }
 
+  
   private getOrderInclude() {
     return {
       items: {
@@ -2533,6 +2919,12 @@ export class OrderService {
       restaurant: true,
       shift: true,
       payment: true,
+      deliveryCourier: { 
+        select: {
+          id: true,
+          name: true,
+        }
+      },
       surcharges: {
         include: {
           surcharge: true
@@ -2575,7 +2967,6 @@ export class OrderService {
 
     const totalPrice = itemsWithTotals.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
     const totalItems = itemsWithTotals.reduce((sum: number, item: any) => sum + item.quantity, 0);
-
     return {
       id: order.id,
       number: order.number,
@@ -2631,7 +3022,8 @@ export class OrderService {
           workshops: item.product.workshops,
           ingredients: item.product.ingredients,
           restaurantPrices: item.product.restaurantPrices,
-          composition: item.product.composition
+          composition: item.product.composition,
+          printLabels:  item.product.printLabels
         },
         quantity: item.quantity,
         comment: item.comment,
@@ -2652,6 +3044,10 @@ export class OrderService {
         address: order.deliveryAddress,
         time: order.deliveryTime,
         notes: order.deliveryNotes,
+        startedAt: order.deliveryStartedAt, 
+        courier: order.deliveryCourier ? { 
+          id: order.deliveryCourier.id,
+          name: order.deliveryCourier.name } : undefined,
       } : undefined,
       surcharges: order.surcharges?.map(s => ({
         id: s.id,

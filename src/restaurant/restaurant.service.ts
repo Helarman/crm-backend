@@ -68,6 +68,8 @@ export class RestaurantService {
       longitude: dto.longitude,
       legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse || false,
+      allowNegativeStock: dto.allowNegativeStock || false,
+      acceptOrders: dto.acceptOrders ?? true,
       shiftCloseTime: dto.shiftCloseTime || new Date('1970-01-01T23:59:00.000Z'),
       // Часы работы
       mondayOpen: dto.mondayOpen || new Date('1970-01-01T09:00:00.000Z'),
@@ -122,6 +124,8 @@ export class RestaurantService {
       legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse,
       shiftCloseTime: dto.shiftCloseTime,
+      allowNegativeStock: dto.allowNegativeStock || false,
+      acceptOrders: dto.acceptOrders ?? true,
       mondayOpen: dto.mondayOpen,
       mondayClose: dto.mondayClose,
       mondayIsWorking: dto.mondayIsWorking,
@@ -280,7 +284,46 @@ export class RestaurantService {
       include: this.includeProducts,
     });
   }
+async updateStockSettings(restaurantId: string, allowNegativeStock: boolean) {
+    await this.getById(restaurantId);
+    
+    return this.prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { allowNegativeStock },
+      include: this.includeDetails
+    });
+  }
 
+  async updateOrderSettings(restaurantId: string, acceptOrders: boolean) {
+    await this.getById(restaurantId);
+    
+    return this.prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { acceptOrders },
+      include: this.includeDetails
+    });
+  }
+
+  async canAcceptOrders(restaurantId: string): Promise<boolean> {
+    const restaurant = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { acceptOrders: true }
+    });
+
+    if (!restaurant) throw new NotFoundException('Ресторан не найден');
+    return restaurant.acceptOrders;
+  }
+
+  async canHaveNegativeStock(restaurantId: string): Promise<boolean> {
+    const restaurant = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { allowNegativeStock: true }
+    });
+
+    if (!restaurant) throw new NotFoundException('Ресторан не найден');
+    return restaurant.allowNegativeStock;
+  }
+  
   async getRestaurantProducts(restaurantId: string) {
     const restaurant = await this.prisma.restaurant.findUnique({
       where: { id: restaurantId },

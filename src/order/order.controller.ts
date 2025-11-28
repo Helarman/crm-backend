@@ -34,6 +34,7 @@ import { PaginatedResponse } from './dto/paginated-response.dto';
 import { EnumOrderStatus } from '@prisma/client';
 import { UpdateOrderItemQuantityDto } from './dto/update-order-item-quantity.dto';
 import { PartialRefundOrderItemDto } from './dto/partial-refund-item.dto';
+import { AssignCourierDto } from './dto/assign-courier.dto';
 
 @ApiTags('Заказы')
 @Controller('orders')
@@ -431,4 +432,83 @@ async refundItem(
     return this.orderService.cancelAllActiveOrders(restaurantId);
   }
 
+     @Post(':id/assign-courier')
+  @ApiOperation({ summary: 'Назначить курьера на доставку' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Курьер назначен на доставку', 
+    type: OrderResponse 
+  })
+  async assignCourierToDelivery(
+    @Param('id') id: string,
+    @Body() dto: AssignCourierDto
+  ): Promise<OrderResponse> {
+    return this.orderService.assignCourierToDelivery(id, dto.courierId);
+  }
+
+  @Post(':id/start-delivery')
+  @ApiOperation({ summary: 'Начать доставку' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Доставка начата', 
+    type: OrderResponse 
+  })
+  async startDelivery(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.startDelivery(id);
+  }
+
+  @Post(':id/complete-delivery')
+  @ApiOperation({ summary: 'Завершить доставку' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Доставка завершена', 
+    type: OrderResponse 
+  })
+  async completeDelivery(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.completeDelivery(id);
+  }
+
+  @Delete(':id/courier')
+  @ApiOperation({ summary: 'Удалить курьера из доставки' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Курьер удален из доставки', 
+    type: OrderResponse 
+  })
+  async removeCourierFromDelivery(
+    @Param('id') id: string
+  ): Promise<OrderResponse> {
+    return this.orderService.removeCourierFromDelivery(id);
+  }
+
+  @Get('delivery/active')
+  @ApiOperation({ summary: 'Получить активные заказы доставки' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Список активных заказов доставки', 
+    type: [OrderResponse] 
+  })
+  @ApiQuery({ name: 'restaurantId', required: false, type: String })
+  async getDeliveryOrders(
+    @Query('restaurantId') restaurantId?: string
+  ): Promise<OrderResponse[]> {
+    return this.orderService.getDeliveryOrders(restaurantId);
+  }
+
+  @Get('courier/:courierId/active-deliveries')
+  @ApiOperation({ summary: 'Получить активные доставки курьера' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Список активных доставок курьера', 
+    type: [OrderResponse] 
+  })
+  async getCourierActiveDeliveries(
+    @Param('courierId') courierId: string
+  ): Promise<OrderResponse[]> {
+    return this.orderService.getCourierActiveDeliveries(courierId);
+  }
 }

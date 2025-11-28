@@ -164,4 +164,21 @@ export class UpdateRestaurantDto {
   @IsOptional()
   @IsBoolean()
   sundayIsWorking?: boolean;
+
+   @ApiProperty({ 
+    description: 'Разрешить отрицательный остаток на складе', 
+    required: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowNegativeStock?: boolean;
+
+  @ApiProperty({ 
+    description: 'Принимать заказы', 
+    required: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  acceptOrders?: boolean;
+  
 }

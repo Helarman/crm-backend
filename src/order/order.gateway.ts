@@ -8,6 +8,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
+import { OrderResponse } from './dto/order-response.dto';
 
 @WebSocketGateway({
   cors: {
@@ -164,8 +165,19 @@ export class OrderGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     });
   }
 
+   async notifyCourierAssigned(order: OrderResponse) {
+    this.server.emit('courierAssigned', order);
+  }
+
+  async notifyDeliveryStarted(order: OrderResponse) {
+    this.server.emit('deliveryStarted', order);
+  }
+
+  async notifyDeliveryCompleted(order: OrderResponse) {
+    this.server.emit('deliveryCompleted', order);
+  }
+  
   private removeClientFromAllRooms(client: Socket) {
-    // Удаляем из комнат ресторанов
     this.restaurantRooms.forEach((clients, roomName) => {
       if (clients.has(client.id)) {
         clients.delete(client.id);
