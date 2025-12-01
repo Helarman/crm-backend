@@ -149,4 +149,19 @@ export class CategoryController {
   async normalizeClientOrders(@Body() body: { parentId?: string }) {
     return this.categoryService.normalizeClientOrders(body.parentId);
   }
+   @ApiOperation({ summary: 'Получить категории по ресторану' })
+  @ApiParam({ name: 'restaurantId', description: 'ID ресторана' })
+  @ApiResponse({ status: 200, description: 'Категории найдены' })
+  @Get('restaurant/:restaurantId')
+  async getByRestaurant(@Param('restaurantId') restaurantId: string) {
+    return this.categoryService.getByRestaurant(restaurantId);
+  }
+
+  @ApiOperation({ summary: 'Получить дерево категорий по ресторану' })
+  @ApiParam({ name: 'restaurantId', description: 'ID ресторана' })
+  @ApiResponse({ status: 200, description: 'Дерево категорий найдено' })
+  @Get('restaurant/:restaurantId/tree')
+  async getTreeByRestaurant(@Param('restaurantId') restaurantId: string) {
+    return this.categoryService.getTreeByRestaurant(restaurantId);
+  }
 }

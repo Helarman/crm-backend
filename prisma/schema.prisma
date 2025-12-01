@@ -35,18 +35,30 @@ model User {
   refundedItems  OrderItem[] @relation("OrderItemRefundedBy")
 
   deliveringOrders Order[] @relation("OrderDeliveryCourier")
+
   @@map("user")
 }
 
 model Workshop {
-  id        String            @id @default(cuid())
-  createdAt DateTime          @default(now()) @map("created_at")
-  updatedAt DateTime          @updatedAt @map("updated_at")
-  name      String            @unique
-  products  ProductWorkshop[]
-  users     UserWorkshop[]
+  id          String               @id @default(cuid())
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  name        String               @unique
+  products    ProductWorkshop[]
+  users       UserWorkshop[]
+  restaurants RestaurantWorkshop[]
 
   @@map("workshop")
+}
+
+model RestaurantWorkshop {
+  restaurantId String     @map("restaurant_id")
+  workshopId   String     @map("workshop_id")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  workshop     Workshop   @relation(fields: [workshopId], references: [id])
+
+  @@id([restaurantId, workshopId])
+  @@map("restaurant_workshop")
 }
 
 model UserWorkshop {
@@ -71,6 +83,7 @@ model DeliveryZone {
   updatedAt    DateTime   @updatedAt @map("updated_at")
   color        String?    @default("#3B82F6")
   priority     Int        @default(0)
+
   @@map("delivery_zones")
 }
 
@@ -90,8 +103,8 @@ model Restaurant {
   allowNegativeStock Boolean @default(false) @map("allow_negative_stock")
   acceptOrders       Boolean @default(true) @map("accept_orders")
 
-  shiftCloseTime DateTime @default("1970-01-01T23:59:00.000Z") @map("shift_close_time")
-  paymentIntegrations PaymentIntegration[]
+  shiftCloseTime       DateTime                 @default("1970-01-01T23:59:00.000Z") @map("shift_close_time")
+  paymentIntegrations  PaymentIntegration[]
   users                User[]                   @relation("RestaurantToUser")
   products             Product[]                @relation("RestaurantToProduct")
   shifts               Shift[]                  @relation("RestaurantToShift")
@@ -111,7 +124,10 @@ model Restaurant {
   incomeReasons   ReasonIncome[]
   expenseReasons  ReasonExpense[]
 
-  useWarehouse Boolean @default(false) @map("use_warehouse")
+  personalDiscounts PersonalDiscount[]
+
+  workshops    RestaurantWorkshop[]
+  useWarehouse Boolean              @default(false) @map("use_warehouse")
 
   mondayOpen      DateTime? @map("monday_open")
   mondayClose     DateTime? @map("monday_close")
@@ -141,6 +157,8 @@ model Restaurant {
   sundayClose     DateTime? @map("sunday_close")
   sundayIsWorking Boolean   @default(false) @map("sunday_is_working")
 
+  categories Category[] @relation("CategoryToRestaurant")
+
   @@map("restaurant")
 }
 
@@ -163,15 +181,15 @@ model Product {
   description        String
   weight             Int?
   quantity           Int?
-  packageQuantity    Int?    @map("package_quantity")
-  preparationTime    Int?    @map("preparation_time")
+  packageQuantity    Int?              @map("package_quantity")
+  preparationTime    Int?              @map("preparation_time")
   price              Int
-  printLabels        Boolean @default(false) @map("print_labels")
-  publishedOnWebsite Boolean @default(false) @map("published_on_website")
-  publishedInApp     Boolean @default(false) @map("published_in_app")
-  isStopList         Boolean @default(false) @map("is_stop_list")
+  printLabels        Boolean           @default(false) @map("print_labels")
+  publishedOnWebsite Boolean           @default(false) @map("published_on_website")
+  publishedInApp     Boolean           @default(false) @map("published_in_app")
+  isStopList         Boolean           @default(false) @map("is_stop_list")
   composition        String?
-  workshops ProductWorkshop[]
+  workshops          ProductWorkshop[]
 
   pageTitle       String?  @map("page_title")
   metaDescription String?  @map("meta_description")
@@ -246,7 +264,8 @@ model Category {
   order       Int @default(0)
   clientOrder Int @default(0) @map("client_order")
 
-  products Product[] @relation("ProductToCategory")
+  products    Product[]    @relation("ProductToCategory")
+  restaurants Restaurant[] @relation("CategoryToRestaurant")
 
   @@map("category")
 }
@@ -312,23 +331,67 @@ model UserShift {
 }
 
 model Customer {
-  id                   String                @id @default(uuid())
-  phone                String                @unique
+  id                   String                 @id @default(uuid())
+  phone                String
+  network              Network                @relation(fields: [networkId], references: [id])
+  networkId            String                 @map("network_id")
   code                 String?
   codeExpires          DateTime?
-  shortCode            String?               @map("short_code")
-  shortCodeExpires     DateTime?             @map("short_code_expires")
+  shortCode            String?                @map("short_code")
+  shortCodeExpires     DateTime?              @map("short_code_expires")
   lastLogin            DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  orders               Order[]               @relation("OrderToCustomer")
-  bonusPoints          Float                 @default(0) @map("bonus_points")
-  personalDiscount     Float                 @default(0) @map("personal_discount")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  orders               Order[]                @relation("OrderToCustomer")
   bonusTransactions    BonusTransaction[]
   discountApplications DiscountApplication[]
   promocodes           PromoCode[]
+  personalDiscounts    PersonalDiscount[]
+  bonusBalances        CustomerBonusBalance[]
 
+  @@unique([phone, networkId])
   @@map("customer")
+}
+
+model PersonalDiscount {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId String   @map("customer_id")
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String     @map("restaurant_id")
+
+  discount Float   @default(0) // 0-100%
+  isActive Boolean @default(true) @map("is_active")
+
+  orders Order[]
+
+  @@unique([customerId, restaurantId])
+  @@map("personal_discounts")
+}
+
+model CustomerBonusBalance {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId String   @map("customer_id")
+
+  network   Network @relation(fields: [networkId], references: [id])
+  networkId String  @map("network_id")
+
+  balance     Float @default(0)
+  totalEarned Float @default(0) @map("total_earned")
+  totalSpent  Float @default(0) @map("total_spent")
+
+  transactions BonusTransaction[]
+
+  @@unique([customerId, networkId])
+  @@map("customer_bonus_balances")
 }
 
 model Order {
@@ -370,16 +433,18 @@ model Order {
   bonusPointsUsed   Float              @default(0) @map("bonus_points_used")
   bonusPointsEarned Float              @default(0) @map("bonus_points_earned")
 
-  isReordered      Boolean    @default(false) @map("is_reordered") 
-  hasDiscount      Boolean    @default(false) @map("has_discount") 
-  discountCanceled Boolean    @default(false) @map("discount_canceled") 
+  isReordered      Boolean    @default(false) @map("is_reordered")
+  hasDiscount      Boolean    @default(false) @map("has_discount")
+  discountCanceled Boolean    @default(false) @map("discount_canceled")
   isPrecheck       Boolean    @default(false) @map("is_precheck")
-  isRefund         Boolean    @default(false) @map("is_refund") 
+  isRefund         Boolean    @default(false) @map("is_refund")
   logs             OrderLog[]
 
-  deliveryStartedAt DateTime?       @map("delivery_started_at")
-  deliveryCourier   User?           @relation("OrderDeliveryCourier", fields: [deliveryCourierId], references: [id])
-  deliveryCourierId String?         @map("delivery_courier_id")
+  deliveryStartedAt  DateTime?         @map("delivery_started_at")
+  deliveryCourier    User?             @relation("OrderDeliveryCourier", fields: [deliveryCourierId], references: [id])
+  deliveryCourierId  String?           @map("delivery_courier_id")
+  personalDiscountId String?           @map("personal_discount_id")
+  personalDiscount   PersonalDiscount? @relation(fields: [personalDiscountId], references: [id])
 
   @@map("orders")
 }
@@ -462,67 +527,67 @@ model OrderSurcharge {
 }
 
 model PaymentIntegration {
-  id          String              @id @default(cuid())
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Основная информация
-  name        String              // Человекочитаемое название (например: "Основная ЮKassa")
-  provider    PaymentProviderType // Тип платежной системы
-  isActive    Boolean             @default(true) @map("is_active")
-  isTestMode  Boolean             @default(true) @map("is_test_mode")
-  
+  name       String // Человекочитаемое название (например: "Основная ЮKassa")
+  provider   PaymentProviderType // Тип платежной системы
+  isActive   Boolean             @default(true) @map("is_active")
+  isTestMode Boolean             @default(true) @map("is_test_mode")
+
   // Привязка к ресторану
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   restaurantId String     @map("restaurant_id")
-  
+
   // Статусы токенов (для провайдеров с OAuth)
-  tokenExpiresAt   DateTime? @map("token_expires_at")
-  lastTokenUpdate  DateTime? @map("last_token_update")
-  
+  tokenExpiresAt  DateTime? @map("token_expires_at")
+  lastTokenUpdate DateTime? @map("last_token_update")
+
   // === ПОЛЯ ДЛЯ РАЗНЫХ ПРОВАЙДЕРОВ ===
-  
+
   // ЮKassa
   yookassaShopId    String? @map("yookassa_shop_id")
   yookassaSecretKey String? @map("yookassa_secret_key")
-  
+
   // CloudPayments
   cloudpaymentsPublicId  String? @map("cloudpayments_public_id")
   cloudpaymentsApiSecret String? @map("cloudpayments_api_secret")
-  
+
   // Сбербанк
   sberbankLogin         String? @map("sberbank_login")
   sberbankPassword      String? @map("sberbank_password")
   sberbankToken         String? @map("sberbank_token")
   sberbankMerchantLogin String? @map("sberbank_merchant_login")
-  
+
   // Альфа-банк
-  alfabankLogin              String? @map("alfabank_login")
-  alfabankPassword           String? @map("alfabank_password")
-  alfabankToken              String? @map("alfabank_token")
-  alfabankRefreshToken       String? @map("alfabank_refresh_token")
-  alfabankGatewayMerchantId  String? @map("alfabank_gateway_merchant_id")
-  alfabankRestApiUrl         String? @map("alfabank_rest_api_url")
-  
+  alfabankLogin             String? @map("alfabank_login")
+  alfabankPassword          String? @map("alfabank_password")
+  alfabankToken             String? @map("alfabank_token")
+  alfabankRefreshToken      String? @map("alfabank_refresh_token")
+  alfabankGatewayMerchantId String? @map("alfabank_gateway_merchant_id")
+  alfabankRestApiUrl        String? @map("alfabank_rest_api_url")
+
   // СБП
-  sbpMerchantId   String? @map("sbp_merchant_id")
-  sbpSecretKey    String? @map("sbp_secret_key")
-  sbpBankName     String? @map("sbp_bank_name")
-  sbpApiUrl       String? @map("sbp_api_url")
-  sbpQrIssuerId   String? @map("sbp_qr_issuer_id")
-  
+  sbpMerchantId String? @map("sbp_merchant_id")
+  sbpSecretKey  String? @map("sbp_secret_key")
+  sbpBankName   String? @map("sbp_bank_name")
+  sbpApiUrl     String? @map("sbp_api_url")
+  sbpQrIssuerId String? @map("sbp_qr_issuer_id")
+
   // Тинькофф
-  tinkoffTerminalKey  String? @map("tinkoff_terminal_key")
-  tinkoffPassword     String? @map("tinkoff_password")
-  
+  tinkoffTerminalKey String? @map("tinkoff_terminal_key")
+  tinkoffPassword    String? @map("tinkoff_password")
+
   // Дополнительные настройки
-  webhookUrl      String? @map("webhook_url")
-  successUrl      String? @map("success_url")
-  failUrl         String? @map("fail_url")
-  
+  webhookUrl String? @map("webhook_url")
+  successUrl String? @map("success_url")
+  failUrl    String? @map("fail_url")
+
+  @@unique([restaurantId, provider], name: "unique_provider_per_restaurant")
   // Валидация - проверяем, что заполнены поля для активного провайдера
   @@map("payment_integrations")
-  @@unique([restaurantId, provider], name: "unique_provider_per_restaurant")
 }
 
 model Payment {
@@ -793,13 +858,17 @@ model BonusTransaction {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
 
-  customer   Customer @relation(fields: [customerId], references: [id])
-  customerId String   @map("customer_id")
-
-  amount      Float
-  description String?
-  order       Order?  @relation(fields: [orderId], references: [id], name: "BonusTransactionToOrder")
-  orderId     String? @map("order_id")
+  customer     Customer              @relation(fields: [customerId], references: [id])
+  customerId   String                @map("customer_id")
+  network      Network               @relation(fields: [networkId], references: [id])
+  networkId    String                @map("network_id")
+  type         BonusTransactionType
+  amount       Float
+  description  String?
+  order        Order?                @relation(fields: [orderId], references: [id], name: "BonusTransactionToOrder")
+  orderId      String?               @map("order_id")
+  balanceAfter Float?                @map("balance_after")
+  balance      CustomerBonusBalance? @relation(fields: [customerId, networkId], references: [customerId, networkId])
 
   @@map("bonus_transactions")
 }
@@ -925,10 +994,12 @@ model Network {
   tenant   Tenant? @relation(fields: [tenantId], references: [id])
   tenantId String? @unique @map("tenant_id")
 
-  restaurants Restaurant[]
-
-  logo         String?
-  primaryColor String  @default("#4f46e5")
+  restaurants           Restaurant[]
+  customerBonusBalances CustomerBonusBalance[]
+  bonusTransactions     BonusTransaction[]
+  logo                  String?
+  primaryColor          String                 @default("#4f46e5")
+  Customer              Customer[]
 
   @@map("networks")
 }
@@ -996,6 +1067,13 @@ model ReasonExpense {
 
   @@unique([name, restaurantId])
   @@map("reason_expenses")
+}
+
+enum BonusTransactionType {
+  EARN
+  SPEND
+  ADJUST
+  EXPIRY
 }
 
 enum EnumSurchargeType {

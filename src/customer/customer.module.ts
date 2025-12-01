@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import { CustomerVerificationController } from './customer-verification.controller';
-import { CustomerVerificationService } from './customer-verification.service';
+import { CustomerController } from './customer.controller';
+import { CustomerService } from './customer.service';
 import { PrismaService } from '../prisma.service';
 
 @Module({
@@ -19,7 +19,8 @@ import { PrismaService } from '../prisma.service';
       inject: [ConfigService],
     }),
   ],
-  controllers: [CustomerVerificationController],
-  providers: [CustomerVerificationService, PrismaService],
+  controllers: [CustomerController],
+  providers: [CustomerService, PrismaService],
+  exports: [CustomerService], 
 })
-export class CustomerVerificationModule {}
+export class CustomerModule {}

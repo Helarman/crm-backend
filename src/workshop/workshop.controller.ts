@@ -4,7 +4,8 @@ import { CreateWorkshopDto } from './dto/create-workshop.dto';
 import { UpdateWorkshopDto } from './dto/update-workshop.dto';
 import { WorkshopResponseDto } from './dto/workshop-response.dto';
 import { AssignUsersDto } from './dto/assign-users.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { AssignRestaurantsDto } from './dto/assign-users.dto';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 
 @ApiTags('Workshops')
 @Controller('workshops')
@@ -75,4 +76,53 @@ export class WorkshopController {
   async getUsers(@Param('id') workshopId: string): Promise<string[]> {
     return this.workshopService.getUsers(workshopId);
   }
+
+  // Новые методы для работы с ресторанами
+  @Post(':id/restaurants')
+  @ApiOperation({ summary: 'Добавить рестораны в цех' })
+  @ApiResponse({ status: 200 })
+  async addRestaurants(
+    @Param('id') workshopId: string,
+    @Body() dto: AssignRestaurantsDto,
+  ): Promise<void> {
+    return this.workshopService.addRestaurants(workshopId, dto.restaurantIds);
+  }
+
+  @Delete(':id/restaurants')
+  @ApiOperation({ summary: 'Удалить рестораны из цеха' })
+  @ApiResponse({ status: 204 })
+  async removeRestaurants(
+    @Param('id') workshopId: string,
+    @Body() dto: AssignRestaurantsDto,
+  ): Promise<void> {
+    return this.workshopService.removeRestaurants(workshopId, dto.restaurantIds);
+  }
+
+  @Get('restaurant/:restaurantId')
+  @ApiOperation({ 
+    summary: 'Получить цехи по ресторану',
+    description: 'Возвращает список всех цехов, привязанных к указанному ресторану'
+  })
+  @ApiParam({
+    name: 'restaurantId',
+    type: String,
+    description: 'ID ресторана',
+    example: 'cln8z9p3a000008l49w9z5q1e'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Список цехов ресторана',
+    type: [WorkshopResponseDto]
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Ресторан не найден' 
+  })
+  async getWorkshopsByRestaurant(
+    @Param('restaurantId') restaurantId: string,
+  ): Promise<WorkshopResponseDto[]> {
+    return this.workshopService.findByRestaurantId(restaurantId);
+  }
+
+
 }

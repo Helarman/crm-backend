@@ -12,6 +12,7 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateAttentionFlagsDto } from './dto/update-attention-flags.dto';
 import { PaginatedResponse } from './dto/paginated-response.dto';
 import { OrderGateway } from './order.gateway';
+import { CustomerService } from 'src/customer/customer.service';
 
 function timeStringToISODate(timeStr: string): string {
   const [hours, minutes] = timeStr.split(':').map(Number);
@@ -27,6 +28,7 @@ export class OrderService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly loyaltyService: CustomerService
   ) {}
 
   async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
@@ -50,62 +52,72 @@ export class OrderService {
     const surchargesAmount = this.calculateSurchargesTotal(dto.surcharges || [], baseAmount + deliveryPrice);
     const totalAmount = baseAmount + deliveryPrice + surchargesAmount;
 
-    const order = await this.prisma.$transaction(async (prisma) => {
-      const order = await prisma.order.create({
-        data: {
-          status: EnumOrderStatus.CREATED,
-          source: dto.source,
-          number: orderNumber,
-          customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
-          phone: dto.phone,
-          restaurant: { connect: { id: dto.restaurantId } },
-          shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
-          type: dto.type,
-          scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
-          totalAmount: totalAmount,
-          numberOfPeople: dto.numberOfPeople.toString(),
-          comment: dto.comment,
-          tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
-          deliveryAddress: dto.deliveryAddress,
-          deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
-          deliveryNotes: dto.deliveryNotes,
-          items: {
-            create: dto.items.map(item => ({
-              product: { connect: { id: item.productId } },
-              quantity: item.quantity,
-              price: productPrices.find(pp => pp.productId === item.productId)?.price || 0,
-              comment: item.comment,
-              status: EnumOrderItemStatus.CREATED,
-              additives: item.additiveIds
-                ? { connect: item.additiveIds.map(id => ({ id })) }
-                : undefined,
-            })),
-          },
-          surcharges: dto.surcharges?.length ? {
-            create: dto.surcharges.map(surcharge => ({
-              surcharge: { connect: { id: surcharge.surchargeId } },
-              amount: surcharge.amount,
-              description: surcharge.description,
-            })),
-          } : undefined,
-        },
-        include: this.getOrderInclude(),
-      });
+    let personalDiscountAmount = 0;
+    let personalDiscountId: string | null = null;
 
-      if (dto.payment) {
-        await prisma.payment.create({
-          data: {
-            order: { connect: { id: order.id } },
-            amount: order.totalAmount,
-            method: dto.payment.method,
-            status: EnumPaymentStatus.PENDING,
-            externalId: dto.payment.externalId,
-          },
-        });
+    if (dto.customerId && dto.restaurantId) {
+      const personalDiscount = await this.loyaltyService.getPersonalDiscount(
+        dto.customerId,
+        dto.restaurantId
+      );
+
+      if (personalDiscount.discount > 0 && personalDiscount.isActive) {
+        personalDiscountAmount = Math.floor(totalAmount * personalDiscount.discount / 100);
+        personalDiscountId = personalDiscount.id;
       }
+    }
+    const finalTotalAmount = totalAmount - personalDiscountAmount;
+    
 
-      return order;
-    });
+   const orderData: any = {
+  status: EnumOrderStatus.CREATED,
+  source: dto.source,
+  number: orderNumber,
+  customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
+  phone: dto.phone,
+  restaurant: { connect: { id: dto.restaurantId } },
+  shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
+  type: dto.type,
+  scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
+  totalAmount: finalTotalAmount,
+  discountAmount: personalDiscountAmount,
+  hasDiscount: personalDiscountAmount > 0,
+  numberOfPeople: dto.numberOfPeople.toString(),
+  comment: dto.comment,
+  tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
+  deliveryAddress: dto.deliveryAddress,
+  deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
+  deliveryNotes: dto.deliveryNotes,
+  items: {
+    create: dto.items.map(item => ({
+      product: { connect: { id: item.productId } },
+      quantity: item.quantity,
+      price: productPrices.find(pp => pp.productId === item.productId)?.price || 0,
+      comment: item.comment,
+      status: EnumOrderItemStatus.CREATED,
+      additives: item.additiveIds
+        ? { connect: item.additiveIds.map(id => ({ id })) }
+        : undefined,
+    })),
+  },
+  surcharges: dto.surcharges?.length ? {
+    create: dto.surcharges.map(surcharge => ({
+      surcharge: { connect: { id: surcharge.surchargeId } },
+      amount: surcharge.amount,
+      description: surcharge.description,
+    })),
+  } : undefined,
+};
+
+// Добавляем поле только если оно не null
+if (personalDiscountId !== null) {
+  orderData.personalDiscountId = personalDiscountId;
+}
+
+const order = await this.prisma.order.create({
+  data: orderData,
+  include: this.getOrderInclude(),
+});
 
     const response = this.mapToResponse(order);
     
@@ -1862,155 +1874,175 @@ async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResp
   }
 
   async applyCustomerPoints(
-    orderId: string,
-    points: number
-  ): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    if (points > order.customer.bonusPoints) {
-      throw new BadRequestException(
-        'Недостаточно бонусных баллов у клиента'
-      );
-    }
-
-    // Конвертируем баллы в рубли (например, 1 балл = 1 рубль)
-    const pointsValue = points;
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Создаем транзакцию списания баллов
-      await prisma.bonusTransaction.create({
-        data: {
-          customer: { connect: { id: order.customerId! } },
-          order: { connect: { id: orderId } },
-          amount: -points,
-          description: `Списание ${points} баллов для заказа #${order.number}`,
-        },
-      });
-
-      // Обновляем баланс клиента
-      await prisma.customer.update({
-        where: { id: order.customerId! },
-        data: { bonusPoints: { decrement: points } },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { decrement: pointsValue },
-          bonusPointsUsed: { increment: points },
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: pointsValue } },
-        });
+  orderId: string,
+  points: number,
+  networkId?: string // Добавить параметр сети
+): Promise<OrderResponse> {
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: { 
+      customer: true, 
+      payment: true,
+      restaurant: {
+        include: {
+          network: true
+        }
       }
+    },
+  });
 
-      return updated;
+  if (!order) {
+    throw new NotFoundException('Заказ не найден');
+  }
+
+  if (!order.customer) {
+    throw new BadRequestException('К заказу не привязан клиент');
+  }
+
+  if (!order.restaurant.network) {
+    throw new BadRequestException('Ресторан не принадлежит сети');
+  }
+
+  if (order.payment?.status === 'PAID') {
+    throw new BadRequestException('Нельзя изменить оплаченный заказ');
+  }
+
+  // Используем networkId из параметра или из ресторана
+  const targetNetworkId = networkId || order.restaurant.network.id;
+
+  // Получаем текущий баланс клиента в сети
+  const bonusBalance = await this.loyaltyService.getBonusBalance(
+    order.customer.id,
+    targetNetworkId
+  );
+
+  if (points > bonusBalance.balance) {
+    throw new BadRequestException(
+      'Недостаточно бонусных баллов у клиента в данной сети'
+    );
+  }
+
+  // Конвертируем баллы в рубли (1 балл = 1 рубль)
+  const pointsValue = points;
+
+  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+    // Списываем баллы через сервис лояльности
+    await this.loyaltyService.spendBonusPoints(
+      order.customer.id,
+      targetNetworkId,
+      points,
+      orderId,
+      `Списание ${points} баллов для заказа #${order.number}`
+    );
+
+    // Обновляем заказ
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: { decrement: pointsValue },
+        bonusPointsUsed: { increment: points },
+      },
+      include: this.getOrderInclude(),
     });
 
-    const response = this.mapToResponse(updatedOrder);
+    // Обновляем платеж, если он есть
+    if (order.payment) {
+      await prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { amount: { decrement: pointsValue } },
+      });
+    }
 
-    // Отправляем WebSocket уведомление об изменении заказа
-    setTimeout(async () => {
-      await this.orderGateway.notifyOrderModified(response);
-    }, 100);
+    return updated;
+  });
 
-    return response;
-  }
+  const response = this.mapToResponse(updatedOrder);
+
+  // Отправляем WebSocket уведомление об изменении заказа
+  setTimeout(async () => {
+    await this.orderGateway.notifyOrderModified(response);
+  }, 100);
+
+  return response;
+}
 
   async removeCustomerPoints(orderId: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Заказ не найден');
-    }
-
-    if (!order.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя изменить оплаченный заказ');
-    }
-
-    if (order.bonusPointsUsed <= 0) {
-      return this.mapToResponse(order);
-    }
-
-    const pointsToReturn = order.bonusPointsUsed;
-    const pointsValue = pointsToReturn; // 1 балл = 1 рубль
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      // Создаем транзакцию возврата баллов
-      await prisma.bonusTransaction.create({
-        data: {
-          customer: { connect: { id: order.customerId! } },
-          order: { connect: { id: orderId } },
-          amount: pointsToReturn,
-          description: `Возврат ${pointsToReturn} баллов для заказа #${order.number}`,
-        },
-      });
-
-      // Обновляем баланс клиента
-      await prisma.customer.update({
-        where: { id: order.customerId! },
-        data: { bonusPoints: { increment: pointsToReturn } },
-      });
-
-      // Обновляем заказ
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { increment: pointsValue },
-          bonusPointsUsed: 0,
-        },
-        include: this.getOrderInclude(),
-      });
-
-      // Обновляем платеж, если он есть
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { increment: pointsValue } },
-        });
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: { 
+      customer: true, 
+      payment: true,
+      restaurant: {
+        include: {
+          network: true
+        }
       }
+    },
+  });
 
-      return updated;
+  if (!order) {
+    throw new NotFoundException('Заказ не найден');
+  }
+
+  if (!order.customer) {
+    throw new BadRequestException('К заказу не привязан клиент');
+  }
+
+  if (!order.restaurant.network) {
+    throw new BadRequestException('Ресторан не принадлежит сети');
+  }
+
+  if (order.payment?.status === 'PAID') {
+    throw new BadRequestException('Нельзя изменить оплаченный заказ');
+  }
+
+  if (order.bonusPointsUsed <= 0) {
+    return this.mapToResponse(order);
+  }
+
+  const pointsToReturn = order.bonusPointsUsed;
+  const pointsValue = pointsToReturn; // 1 балл = 1 рубль
+
+  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+    // Возвращаем баллы через сервис лояльности
+    await this.loyaltyService.earnBonusPoints(
+      order.customer.id,
+      order.restaurant.network.id,
+      pointsToReturn,
+      orderId,
+      `Возврат ${pointsToReturn} баллов для заказа #${order.number}`
+    );
+
+    // Обновляем заказ
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: { increment: pointsValue },
+        bonusPointsUsed: 0,
+      },
+      include: this.getOrderInclude(),
     });
 
-    const response = this.mapToResponse(updatedOrder);
+    // Обновляем платеж, если он есть
+    if (order.payment) {
+      await prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { amount: { increment: pointsValue } },
+      });
+    }
 
-    // Отправляем WebSocket уведомление об изменении заказа
-    setTimeout(async () => {
-      await this.orderGateway.notifyOrderModified(response);
-    }, 100);
+    return updated;
+  });
 
-    return response;
-  }
+  const response = this.mapToResponse(updatedOrder);
+
+  // Отправляем WebSocket уведомление об изменении заказа
+  setTimeout(async () => {
+    await this.orderGateway.notifyOrderModified(response);
+  }, 100);
+
+  return response;
+}
 
   async removeCustomerFromOrder(orderId: string): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
@@ -2113,53 +2145,72 @@ async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResp
     return response;
   }
 
-  async applyCustomerPersonalDiscount(orderId: string): Promise<OrderResponse> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { customer: true, payment: true }
-    });
-
-    if (!order?.customer) {
-      throw new BadRequestException('К заказу не привязан клиент');
-    }
-
-    if (!order.customer.personalDiscount || order.customer.personalDiscount <= 0) {
-      throw new BadRequestException('У клиента нет персональной скидки');
-    }
-
-    const discountValue = order.customer.personalDiscount;
-    const discountAmount = Math.floor(order.totalAmount * discountValue / 100);
-
-    const updatedOrder = await this.prisma.$transaction(async (prisma) => {
-      const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          totalAmount: { decrement: discountAmount },
-          discountAmount: { increment: discountAmount },
-          hasDiscount: true,
-        },
-        include: this.getOrderInclude(),
-      });
-
-      if (order.payment) {
-        await prisma.payment.update({
-          where: { id: order.payment.id },
-          data: { amount: { decrement: discountAmount } },
-        });
+ async applyCustomerPersonalDiscount(orderId: string): Promise<OrderResponse> {
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: { 
+      customer: true, 
+      payment: true,
+      restaurant: {
+        include: {
+          network: {
+            include: {
+              tenant: true
+            }
+          }
+        }
       }
+    }
+  });
 
-      return updated;
+  if (!order?.customer) {
+    throw new BadRequestException('К заказу не привязан клиент');
+  }
+
+  // Получаем персональную скидку клиента для этого ресторана
+  const personalDiscount = await this.loyaltyService.getPersonalDiscount(
+    order.customer.id,
+    order.restaurantId
+  );
+
+  if (personalDiscount.discount <= 0 || !personalDiscount.isActive) {
+    throw new BadRequestException('У клиента нет активной персональной скидки для этого ресторана');
+  }
+
+  const discountValue = personalDiscount.discount;
+  const discountAmount = Math.floor(order.totalAmount * discountValue / 100);
+
+  const updatedOrder = await this.prisma.$transaction(async (prisma) => {
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: { decrement: discountAmount },
+        discountAmount: { increment: discountAmount },
+        hasDiscount: true,
+        personalDiscountId: personalDiscount.id,
+      },
+      include: this.getOrderInclude(),
     });
 
-    const response = this.mapToResponse(updatedOrder);
+    if (order.payment) {
+      await prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { amount: { decrement: discountAmount } },
+      });
+    }
 
-    // Отправляем WebSocket уведомление об изменении заказа
-    setTimeout(async () => {
-      await this.orderGateway.notifyOrderModified(response);
-    }, 100);
+    return updated;
+  });
 
-    return response;
-  }
+  const response = this.mapToResponse(updatedOrder);
+
+  // Отправляем WebSocket уведомление об изменении заказа
+  setTimeout(async () => {
+    await this.orderGateway.notifyOrderModified(response);
+  }, 100);
+
+  return response;
+}
 
   async assignOrderToShift(
     orderId: string, 
@@ -2991,14 +3042,17 @@ async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResp
         name: order.customer.name,
         phone: order.customer.phone,
         email: order.customer.email,
-        bonusPoints: order.customer.bonusPoints,
-        personalDiscount: order.customer.personalDiscount
       } : undefined,
       restaurant: {
         id: order.restaurant?.id,
         name: order.restaurant?.name,
         address: order.restaurant?.address,
       },
+      personalDiscount: order.personalDiscount ? { 
+        id: order.personalDiscount.id,
+        discount: order.personalDiscount.discount,
+        isActive: order.personalDiscount.isActive,
+      } : undefined,
       items: itemsWithTotals.map(item => ({
         id: item.id,
         status: item.status,

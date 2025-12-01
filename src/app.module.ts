@@ -8,7 +8,7 @@ import { RestaurantModule } from './restaurant/restaurant.module'
 import { UserModule } from './user/user.module'
 import { ProductModule } from './product/product.module';
 import { ShiftModule } from './shift/shift.module'
-import { CustomerVerificationModule } from './customer-verification/customer-verification.module';
+import { CustomerModule } from './customer/customer.module';
 import { AdditiveModule } from './additive/additive.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { PaymentsModule } from './payment/payment.module';
@@ -40,7 +40,7 @@ import { PaymentIntegrationModule } from './payment-integration/payment-integrat
 		AdditiveModule,
 		PaymentsModule,
 		DeliveryZoneModule,
-		CustomerVerificationModule,
+		CustomerModule,
 		WarehouseModule,
 		SurchargeModule,
 		DiscountsModule,

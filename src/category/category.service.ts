@@ -13,6 +13,7 @@ export class CategoryService {
         children: true,
         parent: true,
         products: true,
+        restaurants: true,
       },
     });
 
@@ -22,7 +23,7 @@ export class CategoryService {
   }
 
   async create(dto: CategoryDto) {
-    const { order, clientOrder, ...categoryData } = dto;
+    const { order, clientOrder,restaurantIds, ...categoryData } = dto;
 
     let finalOrder = order;
     let finalClientOrder = clientOrder;
@@ -48,14 +49,17 @@ export class CategoryService {
         ...categoryData,
         order: finalOrder,
         clientOrder: finalClientOrder,
+         restaurants: restaurantIds && restaurantIds.length > 0 ? {
+          connect: restaurantIds.map(id => ({ id }))
+        } : undefined,
       },
     });
   }
 
-  async update(id: string, dto: CategoryDto) {
+   async update(id: string, dto: CategoryDto) {
     await this.getById(id);
 
-    const { order, clientOrder, ...categoryData } = dto;
+    const { order, clientOrder, restaurantIds, ...categoryData } = dto;
 
     let orderData = {};
     let clientOrderData = {};
@@ -73,15 +77,19 @@ export class CategoryService {
         ...categoryData,
         ...orderData,
         ...clientOrderData,
+        restaurants: restaurantIds ? {
+          set: restaurantIds.map(id => ({ id }))
+        } : undefined,
+      },
+      include: {
+        restaurants: true,
       },
     });
   }
 
-
   async delete(id: string) {
     await this.getById(id);
 
-    // Проверяем, есть ли подкатегории
     const children = await this.prisma.category.count({
       where: { parentId: id },
     });
@@ -121,7 +129,9 @@ export class CategoryService {
         children: {
           orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         },
+        restaurants: true,
       },
+      
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     });
   }
@@ -135,11 +145,14 @@ export class CategoryService {
             children: {
               orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
             },
+            restaurants: true
           },
         },
+        restaurants: true
       },
       where: { parentId: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      
     });
 
     return categories;
@@ -175,7 +188,39 @@ export class CategoryService {
       data: { order: newOrder }
     });
   }
-
+  async getByRestaurant(restaurantId: string) {
+    return this.prisma.category.findMany({
+      where: {
+        restaurants: {
+          some: {
+            id: restaurantId
+          }
+        }
+      },
+      include: {
+        children: {
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          where: {
+            restaurants: {
+              some: {
+                id: restaurantId
+              }
+            }
+          },
+        },
+        products: {
+          where: {
+            restaurants: {
+              some: {
+                id: restaurantId
+              }
+            }
+          }
+        },
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
   async updateClientOrder(id: string, newClientOrder: number) {
     const category = await this.getById(id);
 
@@ -207,7 +252,47 @@ export class CategoryService {
       data: { clientOrder: newClientOrder }
     });
   }
+  async getTreeByRestaurant(restaurantId: string) {
+    const categories = await this.prisma.category.findMany({
+      include: {
+        children: {
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            children: {
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            },
+          },
+          where: {
+            restaurants: {
+              some: {
+                id: restaurantId
+              }
+            }
+          },
+        },
+        products: {
+          where: {
+            restaurants: {
+              some: {
+                id: restaurantId
+              }
+            }
+          }
+        },
+      },
+      where: { 
+        parentId: null,
+        restaurants: {
+          some: {
+            id: restaurantId
+          }
+        }
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
 
+    return categories;
+  }
   async moveUp(id: string) {
     const category = await this.getById(id);
 

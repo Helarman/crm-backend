@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CategoryDto {
@@ -74,4 +74,16 @@ export class CategoryDto {
   @IsNumber()
   @IsOptional()
   clientOrder?: number;
+
+  @ApiProperty({
+    example: ['restaurant-id-1', 'restaurant-id-2'],
+    description: 'ID ресторанов, к которым привязана категория',
+    required: false,
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  restaurantIds?: string[];
+
 }

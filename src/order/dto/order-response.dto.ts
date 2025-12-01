@@ -19,8 +19,6 @@ export class OrderResponse {
     name: string;
     phone: string;
     email?: string;
-    bonusPoints?: number;
-    personalDiscount?: number;
   };
   discountInfo?: {
     appliedDiscounts: Array<{
@@ -49,6 +47,7 @@ export class OrderResponse {
       };
     };
   };
+  personalDiscount?: any;
   restaurantId: string;
   items: Array<{
     id: string;
