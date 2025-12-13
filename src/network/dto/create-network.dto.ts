@@ -10,7 +10,7 @@ export class CreateNetworkDto {
   @IsString()
   @IsOptional()
   description?: string;
-
+  currentTariffId?:string
   @ApiProperty()
   ownerId: string;
 
@@ -27,4 +27,6 @@ export class CreateNetworkDto {
   @ApiProperty({ default: '#4f46e5' })
   @IsString()
   primaryColor: string;
+
+  isBlocked?: boolean
 }

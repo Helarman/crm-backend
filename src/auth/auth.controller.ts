@@ -25,7 +25,7 @@ import {
   } from '@nestjs/swagger';
   import { Request, Response } from 'express';
   import { AuthService } from './auth.service';
-  import { AuthDto } from './dto/auth.dto';
+  import { AuthDto, RegisterDto } from './dto/auth.dto';
   import { LoginResponseDto } from './dto/login-response.dto';
   import { RefreshResponseDto } from './dto/refresh-response.dto';
   import * as argon2 from 'argon2'
@@ -117,18 +117,21 @@ import {
 	@UsePipes(new ValidationPipe({ transform: true }))
 	@HttpCode(200)
 	@ApiOperation({ summary: 'Регистрация нового пользователя' })
-	@ApiBody({ type: AuthDto, description: 'Данные для регистрации' })
+	@ApiBody({ type: RegisterDto, description: 'Данные для регистрации' })
 	@ApiResponse({
-	  status: 200,
-	  description: 'Успешная регистрация'
+	status: 200,
+	description: 'Успешная регистрация',
+	type: LoginResponseDto, // Возвращаем токены и информацию о пользователе
 	})
-	@ApiBadRequestResponse({ description: 'Пользователь уже существует' })
-	async register(@Body() dto: AuthDto) {
-		try {
-			this.authService.register(dto);
-			this.logger.log(`User ${dto.email} registered successfully`);
-			return;
-		  } catch (error) {
+	async register(
+	@Body() dto: RegisterDto,
+	@Res({ passthrough: true }) res: Response,
+	): Promise<Omit<LoginResponseDto, 'refreshToken'>> {
+	try {
+		const { refreshToken, ...response } = await this.authService.register(dto);
+		this.authService.addRefreshTokenToResponse(res, refreshToken);
+		return response;
+	} catch (error) {
 			this.logger.error(`Registration failed for user ${dto.email}: ${error.message}`);
 			throw new BadRequestException(
 			  error.message || 'Пользователь с таким email уже существует',

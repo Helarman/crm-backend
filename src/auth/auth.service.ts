@@ -10,7 +10,7 @@ import {
   import { Response } from 'express';
   import { PrismaService } from 'src/prisma.service';
   import { UserService } from 'src/user/user.service';
-  import { AuthDto } from './dto/auth.dto';
+  import { AuthDto, RegisterDto } from './dto/auth.dto';
   import * as argon2 from 'argon2'
   import { User } from '@prisma/client';
   import { Logger } from '@nestjs/common';
@@ -65,25 +65,32 @@ import {
 		}
 	}
 
-	async register(dto: AuthDto): Promise<{
-		user: Omit<User, 'password'>;
-		accessToken: string;
-		refreshToken: string;
-	}> {
-		try {
-		const existingUser = await this.userService.getByEmail(dto.email);
-		if (existingUser) {
-			throw new BadRequestException('Пользователь с таким email уже существует');
-		}
+	async register(dto: RegisterDto): Promise<{
+  user: Omit<User, 'password'>;
+  accessToken: string;
+  refreshToken: string;
+}> {
+  try {
+    const existingUser = await this.userService.getByEmail(dto.email);
+    if (existingUser) {
+      throw new BadRequestException('Пользователь с таким email уже существует');
+    }
 
-		const hashedPassword = await argon2.hash(dto.password, this.hashOptions);
-		const user = await this.userService.create({
-			...dto,
-			password: hashedPassword,
-		});
+    const hashedPassword = await argon2.hash(dto.password, this.hashOptions);
+    const user = await this.userService.create({
+      email: dto.email,
+      password: hashedPassword,
+	  role: 'SUPERVISOR',
+      name: dto.name, // Добавляем поле name
+    });
 
-		return
-		} catch (error) {
+    const tokens = await this.generateTokens(user.id);
+    
+    return {
+      user: this.excludeSensitiveFields(user),
+      ...tokens,
+    };
+  } catch (error) {
 		this.logger.error(`Registration failed: ${error.message}`);
 		throw new BadRequestException('Ошибка регистрации');
 		}

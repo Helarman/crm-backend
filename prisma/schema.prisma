@@ -20,7 +20,7 @@ model User {
   name    String @default("Не указано")
   picture String @default("/uploads/no-user-image.png")
 
-  role          EnumUserRoles          @default(NONE)
+  role          EnumUserRoles          @default(SUPERVISOR)
   restaurant    Restaurant[]           @relation("RestaurantToUser")
   shifts        UserShift[]            @relation("UserToUserShift")
   assignedItems OrderItem[]            @relation("OrderItemToUser")
@@ -34,7 +34,8 @@ model User {
   pausedItems    OrderItem[] @relation("OrderItemPausedBy")
   refundedItems  OrderItem[] @relation("OrderItemRefundedBy")
 
-  deliveringOrders Order[] @relation("OrderDeliveryCourier")
+  deliveringOrders   Order[]              @relation("OrderDeliveryCourier")
+  NetworkTransaction NetworkTransaction[]
 
   @@map("user")
 }
@@ -979,7 +980,6 @@ model Tenant {
 
   @@map("tenants")
 }
-
 model Network {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
@@ -1001,7 +1001,61 @@ model Network {
   primaryColor          String                 @default("#4f46e5")
   Customer              Customer[]
 
+  balance Float @default(0) @map("balance")
+  isBlocked Boolean @default(false) @map("is_blocked")
+  
+  currentTariff   NetworkTariff? @relation(fields: [currentTariffId], references: [id])
+  currentTariffId String?        @map("current_tariff_id")
+  
+  transactions NetworkTransaction[]
+
   @@map("networks")
+}
+
+model NetworkTariff {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  networks Network[]
+  
+  name      String
+  price     Float   @default(0)
+  period    String  @default("month") 
+  
+  isActive Boolean @default(true)
+  
+  @@map("network_tariffs")
+}
+
+enum NetworkTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+model NetworkTransaction {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  network   Network @relation(fields: [networkId], references: [id])
+  networkId String  @map("network_id")
+
+  type NetworkTransactionType
+
+  amount Float
+
+  description String?
+
+  balanceAfter Float @map("balance_after")
+
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdById String? @map("created_by_id")
+
+  referenceType String? @map("reference_type")
+  referenceId   String? @map("reference_id")
+
+  @@map("network_transactions")
 }
 
 model ReasonWriteOff {
@@ -1166,6 +1220,7 @@ enum EnumUserRoles {
   CASHIER
   MANAGER
   SUPERVISOR
+  CONTROL
 }
 
 enum DiscountType {

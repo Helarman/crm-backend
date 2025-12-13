@@ -1,0 +1,110 @@
+{
+  "timestamp": "2025-12-11T22:50:03.516Z",
+  "summary": {
+    "totalRestaurants": 13,
+    "restaurantsWithProducts": 13,
+    "restaurantsWithoutProducts": 0,
+    "totalProducts": 468,
+    "productsWithRestaurants": 468,
+    "productsWithoutRestaurants": 0
+  },
+  "distribution": {
+    "productsPerRestaurant": {
+      "4": 1,
+      "18": 1,
+      "19": 1,
+      "20": 6,
+      "22": 2,
+      "97": 1,
+      "170": 1
+    },
+    "restaurantsPerProduct": {
+      "1": 464,
+      "2": 4
+    }
+  },
+  "topRestaurants": [
+    {
+      "id": "cmbsh1o6n000210v3f9bo8pc8",
+      "productsCount": 170
+    },
+    {
+      "id": "cmgasr7ja00944vgaqmb28pkg",
+      "productsCount": 97
+    },
+    {
+      "id": "cmgfh5ejs00b9c11jhlqq6s5a",
+      "productsCount": 22
+    },
+    {
+      "id": "cmgfnhakm00elc11jbzt6ong2",
+      "productsCount": 22
+    },
+    {
+      "id": "cmgfchok2008fc11jq4a5h7dh",
+      "productsCount": 20
+    },
+    {
+      "id": "cmgffon8800adc11j2jxxf30v",
+      "productsCount": 20
+    },
+    {
+      "id": "cmgfme1ct00dqc11jxa38fk93",
+      "productsCount": 20
+    },
+    {
+      "id": "cmgfp718p00ffc11j3zfqql6q",
+      "productsCount": 20
+    },
+    {
+      "id": "cmgf8y2wp005gc11j9pycruqo",
+      "productsCount": 20
+    },
+    {
+      "id": "cmgfenear009jc11jdg1hn3tn",
+      "productsCount": 20
+    }
+  ],
+  "topProducts": [
+    {
+      "id": "cmchrrv4m006dumiwi9ooeqxg",
+      "restaurantsCount": 2
+    },
+    {
+      "id": "cmdkjfvxm000nggnh3kokclr5",
+      "restaurantsCount": 2
+    },
+    {
+      "id": "cmdss2f6900cppadr5360yeq9",
+      "restaurantsCount": 2
+    },
+    {
+      "id": "cmd66u379007j120xnzygd6ji",
+      "restaurantsCount": 2
+    },
+    {
+      "id": "cmckmtreq002hqi9ultnu56lx",
+      "restaurantsCount": 1
+    },
+    {
+      "id": "cmckcv3uz001tqi9urgj0smux",
+      "restaurantsCount": 1
+    },
+    {
+      "id": "cmbvzf1990018xybvquvv85w4",
+      "restaurantsCount": 1
+    },
+    {
+      "id": "cmgb0pxgm002bc11jl7pusq8q",
+      "restaurantsCount": 1
+    },
+    {
+      "id": "cmgb0w4nb002dc11jfk5l78yh",
+      "restaurantsCount": 1
+    },
+    {
+      "id": "cmgazdqdr000sc11jnbtexfy3",
+      "restaurantsCount": 1
+    }
+  ]
+}

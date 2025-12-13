@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { EnumUserRoles } from '@prisma/client';
 
@@ -32,4 +32,15 @@ export class AuthDto {
   password: string;
 
   role?: EnumUserRoles
+}
+
+export class RegisterDto extends AuthDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Имя обязательно' })
+  @MinLength(2, { message: 'Имя должно содержать минимум 2 символа' })
+  name: string
+
+  @IsBoolean()
+  @IsNotEmpty({ message: 'Необходимо согласие с условиями' })
+  acceptTerms: boolean
 }

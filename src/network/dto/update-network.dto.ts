@@ -6,7 +6,7 @@ export class UpdateNetworkDto {
   @IsString()
   @IsOptional()
   name?: string;
-
+currentTariffId?: string;
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
