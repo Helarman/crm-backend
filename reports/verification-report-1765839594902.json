@@ -1,0 +1,133 @@
+{
+  "timestamp": "2025-12-15T22:59:54.902Z",
+  "migrationDuration": null,
+  "entities": {
+    "tenants": {
+      "total": 2,
+      "success": 0,
+      "errors": 2
+    },
+    "workshops": {
+      "total": 1,
+      "success": 0,
+      "errors": 1
+    },
+    "categories": {
+      "total": 61,
+      "success": 0,
+      "errors": 61
+    },
+    "additives": {
+      "total": 3,
+      "success": 0,
+      "errors": 3
+    },
+    "surcharges": {
+      "total": 1,
+      "success": 0,
+      "errors": 1
+    },
+    "discounts": {
+      "total": 18,
+      "success": 0,
+      "errors": 18
+    },
+    "products": {
+      "total": 468,
+      "success": 0,
+      "errors": 468
+    },
+    "restaurantProductPrices": {
+      "total": 168,
+      "success": 0,
+      "errors": 168
+    },
+    "personalDiscounts": {
+      "total": 2,
+      "success": 0,
+      "errors": 2
+    },
+    "shifts": {
+      "total": 39,
+      "success": 0,
+      "errors": 39
+    },
+    "orders": {
+      "total": 95,
+      "success": 0,
+      "errors": 95
+    },
+    "discountApplications": {
+      "total": 0,
+      "success": 0,
+      "errors": 0
+    },
+    "bonusTransactions": {
+      "total": 4,
+      "success": 0,
+      "errors": 4
+    },
+    "payments": {
+      "total": 76,
+      "success": 0,
+      "errors": 76
+    },
+    "paymentIntegrations": {
+      "total": 3,
+      "success": 0,
+      "errors": 3
+    },
+    "yandexEdaIntegrations": {
+      "total": 0,
+      "success": 0,
+      "errors": 0
+    },
+    "inventoryItems": {
+      "total": 221,
+      "success": 6,
+      "errors": 215
+    },
+    "premixes": {
+      "total": 19,
+      "success": 0,
+      "errors": 19
+    },
+    "warehouses": {
+      "total": 13,
+      "success": 0,
+      "errors": 13
+    },
+    "warehouseItems": {
+      "total": 564,
+      "success": 0,
+      "errors": 564
+    },
+    "productIngredients": {
+      "total": 325,
+      "success": 0,
+      "errors": 325
+    },
+    "networkTransactions": {
+      "total": 0,
+      "success": 0,
+      "errors": 0
+    },
+    "reasonWriteOffs": {
+      "total": 2,
+      "success": 0,
+      "errors": 2
+    },
+    "reasonReceipts": {
+      "total": 2,
+      "success": 0,
+      "errors": 2
+    },
+    "deliveryZones": {
+      "total": 4,
+      "success": 0,
+      "errors": 4
+    }
+  },
+  "errors": 2091,
+  "warnings": []
+}

@@ -27,6 +27,7 @@ export class ProductService {
             workshop: true
           }
         },
+        network: true,
       },
     });
   }
@@ -94,6 +95,7 @@ export class ProductService {
             workshop: true
           }
         },
+        network: true,
       },
     });
 
@@ -102,7 +104,17 @@ export class ProductService {
   }
 
   async create(dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, ...productData } = dto;
+    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, networkId, ...productData } = dto;
+    if (networkId) {
+      const network = await this.prisma.network.findUnique({
+        where: { id: networkId }
+      });
+      
+      if (!network) {
+        throw new NotFoundException('Сеть не найдена');
+      }
+    }
+
     let finalSortOrder = sortOrder;
     let finalClientSortOrder = clientSortOrder;
 
@@ -148,6 +160,7 @@ export class ProductService {
         clientSortOrder: finalClientSortOrder,
         description: productData.description || '',
         category: categoryId ? { connect: { id: categoryId } } : undefined,
+         network: networkId ? { connect: { id: networkId } } : undefined,
         additives: additives ? { connect: additives.map(id => ({ id })) } : undefined,
         workshops: workshopIds ? {
           create: workshopIds.map(id => ({
@@ -177,11 +190,114 @@ export class ProductService {
 
     return this.getById(product.id);
   }
+   async assignNetworkToProducts(networkId: string, productIds?: string[]) {
+    // Проверяем, что сеть существует
+    const network = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+    
+    if (!network) {
+      throw new NotFoundException('Сеть не найдена');
+    }
+
+    // Готовим условие для фильтрации продуктов
+    const whereCondition: any = {
+      networkId: null // Только продукты без сети
+    };
+
+    // Если указаны конкретные ID продуктов
+    if (productIds && productIds.length > 0) {
+      whereCondition.id = { in: productIds };
+    }
+
+    // Получаем продукты для обновления
+    const productsToUpdate = await this.prisma.product.findMany({
+      where: whereCondition
+    });
+
+    if (productsToUpdate.length === 0) {
+      throw new BadRequestException('Нет продуктов для обновления');
+    }
+
+    // Обновляем продукты
+    const updateResult = await this.prisma.product.updateMany({
+      where: whereCondition,
+      data: {
+        networkId: networkId
+      }
+    });
+
+    return {
+      message: `Сеть назначена для ${updateResult.count} продуктов`,
+      updatedCount: updateResult.count
+    };
+  }
+
+ async getProductsWithoutNetwork() {
+  const products = await this.prisma.product.findMany({
+    where: {
+      networkId: null
+    },
+    select: {
+      id: true
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return products.map(product => product.id);
+}
+
+  // Метод для получения продуктов по сети
+  async getProductsByNetwork(networkId: string) {
+    const network = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+    
+    if (!network) {
+      throw new NotFoundException('Сеть не найдена');
+    }
+
+    return this.prisma.product.findMany({
+      where: {
+        networkId: networkId
+      },
+      include: {
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+        restaurantPrices: true
+      },
+      orderBy: {
+        sortOrder: 'desc'
+      }
+    });
+  }
+
   async update(id: string, dto: ProductDto) {
-    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, ...productData } = dto;
+    const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, networkId, ...productData } = dto;
 
     const currentProduct = await this.getById(id);
     const isCategoryChanging = categoryId && currentProduct.categoryId !== categoryId;
+    if (currentProduct.networkId && networkId && currentProduct.networkId !== networkId) {
+        throw new BadRequestException('Нельзя изменить сеть продукта');
+      }
+      
+      // Можно установить сеть, если она еще не установлена
+      if (!currentProduct.networkId && networkId) {
+        const network = await this.prisma.network.findUnique({
+          where: { id: networkId }
+        });
+        
+        if (!network) {
+          throw new NotFoundException('Сеть не найдена');
+        }
+      }
 
     let sortOrderData = {};
     let clientSortOrderData = {};
@@ -233,6 +349,7 @@ export class ProductService {
         ...clientSortOrderData,
         description: productData.description || '',
         category: categoryId ? { connect: { id: categoryId } } : undefined,
+        network: !currentProduct.networkId && networkId ? { connect: { id: networkId } } : undefined,
         additives: additives ? { set: additives.map(id => ({ id })) } : undefined,
         ingredients: ingredients ? {
           create: ingredients.map(ing => ({

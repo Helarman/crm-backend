@@ -14,6 +14,7 @@ export class CategoryService {
         parent: true,
         products: true,
         restaurants: true,
+        network: true,
       },
     });
 
@@ -22,15 +23,36 @@ export class CategoryService {
     return category;
   }
 
-  async create(dto: CategoryDto) {
-    const { order, clientOrder,restaurantIds, ...categoryData } = dto;
+   async create(dto: CategoryDto) {
+    const { order, clientOrder, restaurantIds, networkId, parentId, ...categoryData } = dto;
+
+    const networkExists = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+    
+    if (!networkExists) {
+      throw new NotFoundException('Сеть не найдена');
+    }
+
+    if (parentId) {
+      const parentExists = await this.prisma.category.findUnique({
+        where: { id: parentId }
+      });
+      
+      if (!parentExists) {
+        throw new NotFoundException('Родительская категория не найдена');
+      }
+    }
 
     let finalOrder = order;
     let finalClientOrder = clientOrder;
 
     if (order === undefined) {
       const maxOrder = await this.prisma.category.aggregate({
-        where: { parentId: dto.parentId || null },
+        where: { 
+          parentId: dto.parentId || null,
+          networkId: networkId 
+        },
         _max: { order: true }
       });
       finalOrder = (maxOrder._max.order || 0) + 1;
@@ -38,7 +60,10 @@ export class CategoryService {
 
     if (clientOrder === undefined) {
       const maxClientOrder = await this.prisma.category.aggregate({
-        where: { parentId: dto.parentId || null },
+        where: { 
+          parentId: dto.parentId || null,
+          networkId: networkId
+        },
         _max: { clientOrder: true }
       });
       finalClientOrder = (maxClientOrder._max.clientOrder || 0) + 1;
@@ -49,7 +74,10 @@ export class CategoryService {
         ...categoryData,
         order: finalOrder,
         clientOrder: finalClientOrder,
-         restaurants: restaurantIds && restaurantIds.length > 0 ? {
+        network: {
+          connect: { id: networkId }
+        },
+        restaurants: restaurantIds && restaurantIds.length > 0 ? {
           connect: restaurantIds.map(id => ({ id }))
         } : undefined,
       },
@@ -57,9 +85,13 @@ export class CategoryService {
   }
 
    async update(id: string, dto: CategoryDto) {
-    await this.getById(id);
+    const category = await this.getById(id);
+    
+    if (dto.networkId && dto.networkId !== category.networkId) {
+      throw new BadRequestException('Нельзя изменить сеть категории');
+    }
 
-    const { order, clientOrder, restaurantIds, ...categoryData } = dto;
+    const { order, clientOrder, restaurantIds, networkId, ...categoryData } = dto;
 
     let orderData = {};
     let clientOrderData = {};
@@ -83,6 +115,7 @@ export class CategoryService {
       },
       include: {
         restaurants: true,
+        network: true,
       },
     });
   }
@@ -98,7 +131,6 @@ export class CategoryService {
       throw new Error('Нельзя удалить категорию с подкатегориями');
     }
 
-    // Проверяем, есть ли товары в категории
     const products = await this.prisma.product.count({
       where: { categoryId: id },
     });
@@ -130,6 +162,7 @@ export class CategoryService {
           orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         },
         restaurants: true,
+        network: true, 
       },
       
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
@@ -145,10 +178,12 @@ export class CategoryService {
             children: {
               orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
             },
-            restaurants: true
+            restaurants: true,
+            network: true, 
           },
         },
-        restaurants: true
+        restaurants: true,
+        network: true, 
       },
       where: { parentId: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
@@ -164,7 +199,7 @@ export class CategoryService {
       throw new BadRequestException('Порядок не может быть меньше 1');
     }
 
-    const whereCondition = { parentId: category.parentId || null };
+    const whereCondition = { parentId: category.parentId || null, networkId: category.networkId};
 
     if (newOrder !== category.order) {
       const categoryAtPosition = await this.prisma.category.findFirst({
@@ -188,14 +223,25 @@ export class CategoryService {
       data: { order: newOrder }
     });
   }
-  async getByRestaurant(restaurantId: string) {
+async getByRestaurant(restaurantId: string) {
+    
+    const restaurant = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { networkId: true }
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Ресторан не найден');
+    }
+
     return this.prisma.category.findMany({
       where: {
         restaurants: {
           some: {
             id: restaurantId
           }
-        }
+        },
+        networkId: restaurant.networkId, 
       },
       include: {
         children: {
@@ -205,7 +251,8 @@ export class CategoryService {
               some: {
                 id: restaurantId
               }
-            }
+            },
+            networkId: restaurant.networkId,
           },
         },
         products: {
@@ -228,7 +275,7 @@ export class CategoryService {
       throw new BadRequestException('Порядок не может быть меньше 1');
     }
 
-    const whereCondition = { parentId: category.parentId || null };
+    const whereCondition = { parentId: category.parentId || null,  networkId: category.networkId};
 
     if (newClientOrder !== category.clientOrder) {
       const categoryAtPosition = await this.prisma.category.findFirst({
@@ -252,7 +299,17 @@ export class CategoryService {
       data: { clientOrder: newClientOrder }
     });
   }
+ 
   async getTreeByRestaurant(restaurantId: string) {
+    const restaurant = await this.prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { networkId: true }
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Ресторан не найден');
+    }
+
     const categories = await this.prisma.category.findMany({
       include: {
         children: {
@@ -267,7 +324,8 @@ export class CategoryService {
               some: {
                 id: restaurantId
               }
-            }
+            },
+            networkId: restaurant.networkId,
           },
         },
         products: {
@@ -286,13 +344,15 @@ export class CategoryService {
           some: {
             id: restaurantId
           }
-        }
+        },
+        networkId: restaurant.networkId, 
       },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     });
 
     return categories;
   }
+
   async moveUp(id: string) {
     const category = await this.getById(id);
 
@@ -307,7 +367,10 @@ export class CategoryService {
     const category = await this.getById(id);
 
     const siblings = await this.prisma.category.findMany({
-      where: { parentId: category.parentId || null }
+      where: { 
+        parentId: category.parentId || null,
+        networkId: category.networkId
+      }
     });
 
     const maxOrder = Math.max(...siblings.map(cat => cat.order));
@@ -333,7 +396,10 @@ export class CategoryService {
     const category = await this.getById(id);
 
     const siblings = await this.prisma.category.findMany({
-      where: { parentId: category.parentId || null }
+      where: { 
+        parentId: category.parentId || null,
+        networkId: category.networkId
+      }
     });
 
     const maxOrder = Math.max(...siblings.map(cat => cat.clientOrder));
@@ -345,10 +411,12 @@ export class CategoryService {
     return this.updateClientOrder(id, category.clientOrder + 1);
   }
 
-  // Методы для нормализации порядков
-  async normalizeOrders(parentId?: string) {
+  async normalizeOrders(parentId?: string, networkId?: string) {
     const categories = await this.prisma.category.findMany({
-      where: { parentId: parentId || null },
+      where: { 
+        parentId: parentId || null,
+        networkId: networkId 
+      },
       orderBy: { order: 'asc' }
     });
 
@@ -362,9 +430,12 @@ export class CategoryService {
     return categories.length;
   }
 
-  async normalizeClientOrders(parentId?: string) {
+  async normalizeClientOrders(parentId?: string, networkId?: string) {
     const categories = await this.prisma.category.findMany({
-      where: { parentId: parentId || null },
+      where: { 
+        parentId: parentId || null,
+        networkId: networkId
+      },
       orderBy: { clientOrder: 'asc' }
     });
 
@@ -378,5 +449,64 @@ export class CategoryService {
     return categories.length;
   }
 
+  async getByNetwork(networkId: string) {
+    const networkExists = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+    
+    if (!networkExists) {
+      throw new NotFoundException('Сеть не найдена');
+    }
 
+    return this.prisma.category.findMany({
+      where: {
+        networkId: networkId
+      },
+      include: {
+        children: {
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          where: {
+            networkId: networkId
+          },
+        },
+        restaurants: true,
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async getTreeByNetwork(networkId: string) {
+    const networkExists = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+    
+    if (!networkExists) {
+      throw new NotFoundException('Сеть не найдена');
+    }
+
+    const categories = await this.prisma.category.findMany({
+      include: {
+        children: {
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            children: {
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            },
+            restaurants: true
+          },
+          where: {
+            networkId: networkId
+          },
+        },
+        restaurants: true
+      },
+      where: { 
+        parentId: null,
+        networkId: networkId
+      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return categories;
+  }
 }

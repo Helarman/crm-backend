@@ -20,6 +20,7 @@ export class ProductDto {
   tableNumber?: string;
   content?: string;
   additives?: string[];  
+  networkId?: string;
   clientSortOrder?: number
   restaurantPrices?: {
     restaurantId: string;
@@ -31,3 +32,4 @@ export class ProductDto {
     quantity: number;
   }[];
 }
+

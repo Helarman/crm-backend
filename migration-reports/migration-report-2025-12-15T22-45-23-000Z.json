@@ -1,0 +1,189 @@
+{
+  "timestamp": "2025-12-15T22:45:22.998Z",
+  "summary": {
+    "tablesMigrated": 22,
+    "totalRecords": 0,
+    "totalErrors": 2,
+    "totalSkipped": 0
+  },
+  "details": [
+    {
+      "table": "User",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.01с"
+    },
+    {
+      "table": "Restaurant",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Category",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Product",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.01с"
+    },
+    {
+      "table": "ModifierGroup",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Modifier",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Tag",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "RestaurantTag",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Order",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "OrderItem",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "OrderModifierItem",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Review",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Chat",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Message",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Promo",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Favorite",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Cart",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "CartItem",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "Notification",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "RestaurantProduct (связи)",
+      "migrated": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration": "0.12с"
+    },
+    {
+      "table": "ProductModifierGroup (связи)",
+      "migrated": 0,
+      "errors": 1,
+      "skipped": 0,
+      "duration": "0.00с"
+    },
+    {
+      "table": "ModifierGroupModifier (связи)",
+      "migrated": 0,
+      "errors": 1,
+      "skipped": 0,
+      "duration": "0.00с"
+    }
+  ],
+  "idMapSizes": {
+    "User": 0,
+    "Restaurant": 0,
+    "Category": 0,
+    "Product": 0,
+    "Order": 0,
+    "OrderItem": 0,
+    "OrderModifierItem": 0,
+    "Review": 0,
+    "Chat": 0,
+    "Message": 0,
+    "Promo": 0,
+    "ModifierGroup": 0,
+    "Modifier": 0,
+    "Tag": 0,
+    "RestaurantTag": 0,
+    "Favorite": 0,
+    "Cart": 0,
+    "CartItem": 0,
+    "Notification": 0,
+    "RestaurantProduct": 0,
+    "ProductModifierGroup": 0,
+    "ModifierGroupModifier": 0
+  }
+}

@@ -213,6 +213,9 @@ model Product {
 
   productDiscounts ProductDiscount[]
 
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
+
   @@map("product")
 }
 
@@ -241,6 +244,9 @@ model Additive {
   products   Product[]   @relation("ProductAdditives")
   orderItems OrderItem[] @relation("OrderItemAdditives")
 
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
+
   @@map("additive")
 }
 
@@ -267,6 +273,9 @@ model Category {
 
   products    Product[]    @relation("ProductToCategory")
   restaurants Restaurant[] @relation("CategoryToRestaurant")
+
+  network   Network @relation(fields: [networkId], references: [id])
+  networkId String  @map("network_id")
 
   @@map("category")
 }
@@ -980,6 +989,7 @@ model Tenant {
 
   @@map("tenants")
 }
+
 model Network {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
@@ -1001,13 +1011,16 @@ model Network {
   primaryColor          String                 @default("#4f46e5")
   Customer              Customer[]
 
-  balance Float @default(0) @map("balance")
+  balance   Float   @default(0) @map("balance")
   isBlocked Boolean @default(false) @map("is_blocked")
-  
+
   currentTariff   NetworkTariff? @relation(fields: [currentTariffId], references: [id])
   currentTariffId String?        @map("current_tariff_id")
-  
+
   transactions NetworkTransaction[]
+  Product      Product[]
+  Category     Category[]
+  Additive     Additive[]
 
   @@map("networks")
 }
@@ -1016,15 +1029,15 @@ model NetworkTariff {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  
+
   networks Network[]
-  
-  name      String
-  price     Float   @default(0)
-  period    String  @default("month") 
-  
+
+  name   String
+  price  Float  @default(0)
+  period String @default("month")
+
   isActive Boolean @default(true)
-  
+
   @@map("network_tariffs")
 }
 

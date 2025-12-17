@@ -164,4 +164,20 @@ export class CategoryController {
   async getTreeByRestaurant(@Param('restaurantId') restaurantId: string) {
     return this.categoryService.getTreeByRestaurant(restaurantId);
   }
+  @ApiOperation({ summary: 'Получить категории по сети' })
+  @ApiParam({ name: 'networkId', description: 'ID сети' })
+  @ApiResponse({ status: 200, description: 'Категории найдены' })
+  @Get('network/:networkId')
+  async getByNetwork(@Param('networkId') networkId: string) {
+    return this.categoryService.getByNetwork(networkId);
+  }
+
+  @ApiOperation({ summary: 'Получить дерево категорий по сети' })
+  @ApiParam({ name: 'networkId', description: 'ID сети' })
+  @ApiResponse({ status: 200, description: 'Дерево категорий найдено' })
+  @Get('network/:networkId/tree')
+  async getTreeByNetwork(@Param('networkId') networkId: string) {
+    return this.categoryService.getTreeByNetwork(networkId);
+  }
+  
 }

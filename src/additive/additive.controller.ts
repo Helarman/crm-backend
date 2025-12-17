@@ -6,7 +6,8 @@ import {
     Patch,
     Param,
     Delete,
-    Put
+    Put,
+    Query
   } from '@nestjs/common';
   import { AdditiveService } from './additive.service';
   import { CreateAdditiveDto } from './dto/create-additive.dto';
@@ -17,6 +18,7 @@ import {
     ApiResponse,
     ApiBody,
     ApiParam,
+    ApiQuery,
   } from '@nestjs/swagger';
   import {AdditiveWithProducts} from './interfaces/additive.interface'
   import { UpdateProductAdditivesDto } from './dto/update-product-additives.dto'
@@ -113,4 +115,27 @@ import {
     ): Promise<AdditiveWithProducts[]> {
       return this.additiveService.updateProductAdditives(productId, updateDto.additiveIds);
     }
+
+    @Get('network/:networkId')
+  @ApiOperation({ summary: 'Получить модификаторы по сети' })
+  @ApiParam({ name: 'networkId', description: 'ID сети' })
+  @ApiResponse({ status: 200, description: 'Список модификаторов сети' })
+  getByNetwork(@Param('networkId') networkId: string): Promise<AdditiveWithProducts[]> {
+    return this.additiveService.getByNetwork(networkId);
+  }
+
+  @Get('network/:networkId/available')
+  @ApiOperation({ summary: 'Получить доступные модификаторы по сети (с пагинацией)' })
+  @ApiParam({ name: 'networkId', description: 'ID сети' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Номер страницы' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Лимит на страницу' })
+  @ApiResponse({ status: 200, description: 'Пагинированный список модификаторов сети' })
+  getByNetworkPaginated(
+    @Param('networkId') networkId: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ): Promise<{ data: AdditiveWithProducts[]; total: number; page: number; limit: number }> {
+    return this.additiveService.getByNetworkPaginated(networkId, page, limit);
+  }
+
   }

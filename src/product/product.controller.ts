@@ -216,5 +216,46 @@ export class ProductController {
 		return this.productService.normalizeCategoryClientOrders(body.categoryId);
 	}
 
+	@Post('assign-network')
+  @Auth()
+  @ApiOperation({ summary: 'Назначить сеть продуктам' })
+  @ApiBody({ 
+    description: 'Данные для назначения сети',
+    schema: {
+      type: 'object',
+      properties: {
+        networkId: { type: 'string' },
+        productIds: { 
+          type: 'array',
+          items: { type: 'string' },
+          nullable: true 
+        }
+      }
+    }
+  })
+  @ApiOkResponse({ description: 'Сеть успешно назначена продуктам' })
+  @ApiBadRequestResponse({ description: 'Некорректные данные' })
+  async assignNetworkToProducts(
+    @Body() body: { networkId: string; productIds?: string[] }
+  ) {
+    return this.productService.assignNetworkToProducts(body.networkId, body.productIds);
+  }
+
+  @Get('without-network')
+  @ApiOperation({ summary: 'Получить продукты без сети' })
+  @ApiOkResponse({ description: 'Продукты успешно получены' })
+  async getProductsWithoutNetwork() {
+    return this.productService.getProductsWithoutNetwork();
+  }
+
+  @Get('by-network/:networkId')
+  @ApiOperation({ summary: 'Получить продукты по сети' })
+  @ApiParam({ name: 'networkId', description: 'ID сети' })
+  @ApiOkResponse({ description: 'Продукты успешно получены' })
+  @ApiNotFoundResponse({ description: 'Сеть не найдена' })
+  async getProductsByNetwork(@Param('networkId') networkId: string) {
+    return this.productService.getProductsByNetwork(networkId);
+  }
+  
 
 }

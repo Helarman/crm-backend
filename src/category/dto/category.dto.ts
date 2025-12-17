@@ -85,5 +85,14 @@ export class CategoryDto {
   @IsString({ each: true })
   @IsOptional()
   restaurantIds?: string[];
+ 
+  @ApiProperty({
+    example: 'clk9e9z9z0000qjyz9z9z9z9a',
+    description: 'ID сети, к которой принадлежит категория',
+    required: true,
+  })
+  @IsString({ message: 'ID сети обязательно' })
+  @IsNotEmpty({ message: 'ID сети не может быть пустым' })
+  networkId: string;
 
 }
