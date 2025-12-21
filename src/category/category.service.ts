@@ -24,101 +24,142 @@ export class CategoryService {
   }
 
    async create(dto: CategoryDto) {
-    const { order, clientOrder, restaurantIds, networkId, parentId, ...categoryData } = dto;
+  const { order, clientOrder, restaurantIds, networkId, parentId, ...categoryData } = dto;
+  const networkExists = await this.prisma.network.findUnique({
+    where: { id: networkId }
+  });
+  
+  if (!networkExists) {
+    throw new NotFoundException('Сеть не найдена');
+  }
 
-    const networkExists = await this.prisma.network.findUnique({
-      where: { id: networkId }
+  if (parentId) {
+    const parentExists = await this.prisma.category.findUnique({
+      where: { id: parentId }
     });
     
-    if (!networkExists) {
-      throw new NotFoundException('Сеть не найдена');
+    if (!parentExists) {
+      throw new NotFoundException('Родительская категория не найдена');
     }
+  }
 
+  let finalOrder = order;
+  let finalClientOrder = clientOrder;
+
+  if (order === undefined) {
     if (parentId) {
-      const parentExists = await this.prisma.category.findUnique({
-        where: { id: parentId }
-      });
-      
-      if (!parentExists) {
-        throw new NotFoundException('Родительская категория не найдена');
-      }
-    }
-
-    let finalOrder = order;
-    let finalClientOrder = clientOrder;
-
-    if (order === undefined) {
       const maxOrder = await this.prisma.category.aggregate({
         where: { 
-          parentId: dto.parentId || null,
+          parentId: parentId,
+          networkId: networkId 
+        },
+        _max: { order: true }
+      });
+      finalOrder = (maxOrder._max.order || 0) + 1;
+    } else {
+      const maxOrder = await this.prisma.category.aggregate({
+        where: { 
           networkId: networkId 
         },
         _max: { order: true }
       });
       finalOrder = (maxOrder._max.order || 0) + 1;
     }
-
-    if (clientOrder === undefined) {
-      const maxClientOrder = await this.prisma.category.aggregate({
-        where: { 
-          parentId: dto.parentId || null,
-          networkId: networkId
-        },
-        _max: { clientOrder: true }
-      });
-      finalClientOrder = (maxClientOrder._max.clientOrder || 0) + 1;
-    }
-
-    return this.prisma.category.create({
-      data: {
-        ...categoryData,
-        order: finalOrder,
-        clientOrder: finalClientOrder,
-        network: {
-          connect: { id: networkId }
-        },
-        restaurants: restaurantIds && restaurantIds.length > 0 ? {
-          connect: restaurantIds.map(id => ({ id }))
-        } : undefined,
-      },
-    });
   }
 
-   async update(id: string, dto: CategoryDto) {
-    const category = await this.getById(id);
-    
-    if (dto.networkId && dto.networkId !== category.networkId) {
-      throw new BadRequestException('Нельзя изменить сеть категории');
-    }
-
-    const { order, clientOrder, restaurantIds, networkId, ...categoryData } = dto;
-
-    let orderData = {};
-    let clientOrderData = {};
-
-    if (order !== undefined) {
-      orderData = { order };
-    }
-    if (clientOrder !== undefined) {
-      clientOrderData = { clientOrder };
-    }
-
-    return this.prisma.category.update({
-      where: { id },
-      data: {
-        ...categoryData,
-        ...orderData,
-        ...clientOrderData,
-        restaurants: restaurantIds ? {
-          set: restaurantIds.map(id => ({ id }))
-        } : undefined,
+  if (clientOrder === undefined) {
+    const maxClientOrder = await this.prisma.category.aggregate({
+      where: { 
+        parentId: parentId || null,
+        networkId: networkId
       },
-      include: {
-        restaurants: true,
-        network: true,
-      },
+      _max: { clientOrder: true }
     });
+    finalClientOrder = (maxClientOrder._max.clientOrder || 0) + 1;
   }
+
+  return this.prisma.category.create({
+    data: {
+      ...categoryData,
+      order: finalOrder,
+      clientOrder: finalClientOrder,
+      network: {
+        connect: { id: networkId }
+      },
+      ...(parentId ? {
+        parent: {
+          connect: { id: parentId }
+        }
+      } : {}),
+      restaurants: restaurantIds && restaurantIds.length > 0 ? {
+        connect: restaurantIds.map(id => ({ id }))
+      } : undefined,
+    },
+    include: {
+      parent: true, // Добавляем parent в include
+      restaurants: true,
+      network: true,
+    },
+  });
+}
+
+  async update(id: string, dto: CategoryDto) {
+  const category = await this.getById(id);
+  
+  if (dto.networkId && dto.networkId !== category.networkId) {
+    throw new BadRequestException('Нельзя изменить сеть категории');
+  }
+
+  const { order, clientOrder, restaurantIds, networkId, parentId, ...categoryData } = dto;
+
+  let orderData = {};
+  let clientOrderData = {};
+
+  if (order !== undefined) {
+    orderData = { order };
+  }
+  if (clientOrder !== undefined) {
+    clientOrderData = { clientOrder };
+  }
+
+  // Подготавливаем данные для обновления родительской категории
+  let parentData = {};
+  if (parentId !== undefined) {
+    if (parentId === null) {
+      // Если parentId равен null, отключаем связь с родителем
+      parentData = {
+        parent: {
+          disconnect: true
+        }
+      };
+    } else {
+      // Иначе подключаем к указанному родителю
+      parentData = {
+        parent: {
+          connect: { id: parentId }
+        }
+      };
+    }
+  }
+
+  return this.prisma.category.update({
+    where: { id },
+    data: {
+      ...categoryData,
+      ...orderData,
+      ...clientOrderData,
+      ...parentData,
+      restaurants: restaurantIds ? {
+        set: restaurantIds.map(id => ({ id }))
+      } : undefined,
+    },
+    include: {
+      restaurants: true,
+      network: true,
+      parent: true, // Добавляем parent в include
+    },
+  });
+}
 
   async delete(id: string) {
     await this.getById(id);
@@ -449,31 +490,67 @@ async getByRestaurant(restaurantId: string) {
     return categories.length;
   }
 
-  async getByNetwork(networkId: string) {
-    const networkExists = await this.prisma.network.findUnique({
-      where: { id: networkId }
-    });
-    
-    if (!networkExists) {
-      throw new NotFoundException('Сеть не найдена');
-    }
-
-    return this.prisma.category.findMany({
-      where: {
-        networkId: networkId
-      },
-      include: {
-        children: {
-          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-          where: {
-            networkId: networkId
-          },
-        },
-        restaurants: true,
-      },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-    });
+ async getByNetwork(networkId: string) {
+  const networkExists = await this.prisma.network.findUnique({
+    where: { id: networkId }
+  });
+  
+  if (!networkExists) {
+    throw new NotFoundException('Сеть не найдена');
   }
+
+  // Используем рекурсивный запрос для построения дерева
+  const categories = await this.prisma.category.findMany({
+    where: {
+      networkId: networkId
+    },
+    include: {
+      children: {
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        include: {
+          children: {
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            include: {
+              children: true // Добавляем следующий уровень
+            }
+          },
+          restaurants: true,
+        },
+      },
+      restaurants: true,
+      parent: true, // Опционально, если нужна информация о родителе
+    },
+    orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  // Если нужно именно древовидная структура (только корневые элементы)
+  return this.buildTree(categories);
+}
+
+// Вспомогательный метод для построения дерева из плоского списка
+private buildTree(categories: any[]) {
+  const map = new Map();
+  const tree = [];
+
+  // Создаем мапу для быстрого доступа
+  categories.forEach(category => {
+    map.set(category.id, { ...category, children: [] });
+  });
+
+  // Строим дерево
+  categories.forEach(category => {
+    if (category.parentId) {
+      const parent = map.get(category.parentId);
+      if (parent) {
+        parent.children.push(map.get(category.id));
+      }
+    } else {
+      tree.push(map.get(category.id));
+    }
+  });
+
+  return tree;
+}
 
   async getTreeByNetwork(networkId: string) {
     const networkExists = await this.prisma.network.findUnique({
