@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Param, 
+  Put, 
+  Delete,
+  Patch 
+} from '@nestjs/common';
 import { WorkshopService } from './workshop.service';
 import { CreateWorkshopDto } from './dto/create-workshop.dto';
 import { UpdateWorkshopDto } from './dto/update-workshop.dto';
@@ -77,7 +86,6 @@ export class WorkshopController {
     return this.workshopService.getUsers(workshopId);
   }
 
-  // Новые методы для работы с ресторанами
   @Post(':id/restaurants')
   @ApiOperation({ summary: 'Добавить рестораны в цех' })
   @ApiResponse({ status: 200 })
@@ -124,5 +132,52 @@ export class WorkshopController {
     return this.workshopService.findByRestaurantId(restaurantId);
   }
 
+  // Новые эндпоинты для работы с сетями
+  @Get('network/:networkId')
+  @ApiOperation({ 
+    summary: 'Получить цехи по сети',
+    description: 'Возвращает список всех цехов, принадлежащих указанной сети'
+  })
+  @ApiParam({
+    name: 'networkId',
+    type: String,
+    description: 'ID сети',
+    example: 'cln8z9p3a000008l49w9z5q1e'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Список цехов сети',
+    type: [WorkshopResponseDto]
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Сеть не найдена' 
+  })
+  async getWorkshopsByNetwork(
+    @Param('networkId') networkId: string,
+  ): Promise<WorkshopResponseDto[]> {
+    return this.workshopService.findByNetworkId(networkId);
+  }
 
+  @Patch(':id/network')
+  @ApiOperation({ 
+    summary: 'Обновить сеть цеха',
+    description: 'Привязывает цех к сети или удаляет привязку'
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: 'ID цеха'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Обновленный цех',
+    type: WorkshopResponseDto
+  })
+  async updateNetwork(
+    @Param('id') workshopId: string,
+    @Body('networkId') networkId: string | null,
+  ): Promise<WorkshopResponseDto> {
+    return this.workshopService.updateNetwork(workshopId, networkId);
+  }
 }

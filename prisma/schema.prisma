@@ -49,6 +49,9 @@ model Workshop {
   users       UserWorkshop[]
   restaurants RestaurantWorkshop[]
 
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
+
   @@map("workshop")
 }
 
@@ -191,13 +194,13 @@ model Product {
   isStopList         Boolean           @default(false) @map("is_stop_list")
   composition        String?
   workshops          ProductWorkshop[]
-
-  pageTitle       String?  @map("page_title")
-  metaDescription String?  @map("meta_description")
-  content         String?
-  images          String[]
-  sortOrder       Int      @default(0) @map("sort_order")
-  clientSortOrder Int      @default(0) @map("client_sort_order")
+  isUsed             Boolean           @default(true) @map("is_used")
+  pageTitle          String?           @map("page_title")
+  metaDescription    String?           @map("meta_description")
+  content            String?
+  images             String[]
+  sortOrder          Int               @default(0) @map("sort_order")
+  clientSortOrder    Int               @default(0) @map("client_sort_order")
 
   additives Additive[] @relation("ProductAdditives")
 
@@ -1021,6 +1024,7 @@ model Network {
   Product      Product[]
   Category     Category[]
   Additive     Additive[]
+  Workshop     Workshop[]
 
   @@map("networks")
 }

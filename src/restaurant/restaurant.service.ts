@@ -341,4 +341,36 @@ async updateStockSettings(restaurantId: string, allowNegativeStock: boolean) {
     if (!restaurant) throw new NotFoundException('Ресторан не найден');
     return restaurant.products;
   }
+
+  async getRestaurantsByUserAndNetwork(userId: string, networkId: string) {
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!user) {
+    throw new NotFoundException('Пользователь не найден');
+  }
+
+  const network = await this.prisma.network.findUnique({
+    where: { id: networkId }
+  });
+
+  if (!network) {
+    throw new NotFoundException('Сеть ресторанов не найдена');
+  }
+
+  const restaurants = await this.prisma.restaurant.findMany({
+    where: {
+      networkId: networkId,
+      users: {
+        some: {
+          id: userId
+        }
+      }
+    },
+    include: this.includeDetails
+  });
+
+  return restaurants;
+}
 }

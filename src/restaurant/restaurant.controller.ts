@@ -185,5 +185,16 @@ import {
 	  return this.restaurantService.getRestaurantProducts(restaurantId);
 	}
 
-	
-  }
+	@Get('user/:userId/network/:networkId')
+	@ApiOperation({ summary: 'Получить рестораны пользователя в указанной сети' })
+	@ApiParam({ name: 'userId', description: 'ID пользователя' })
+	@ApiParam({ name: 'networkId', description: 'ID сети' })
+	@ApiOkResponse({ description: 'Список ресторанов успешно получен' })
+	@ApiNotFoundResponse({ description: 'Пользователь или сеть не найдены' })
+	async getRestaurantsByUserAndNetwork(
+	@Param('userId') userId: string,
+	@Param('networkId') networkId: string
+	) {
+		return this.restaurantService.getRestaurantsByUserAndNetwork(userId, networkId);
+	}
+}

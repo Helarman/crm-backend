@@ -1,28 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsArray, ArrayMinSize } from 'class-validator';
 
 export class CreateWorkshopDto {
-  @ApiProperty({ example: 'Пиццерия', description: 'Название цеха' })
+  @ApiProperty({ description: 'Название цеха' })
   @IsString()
-  @IsNotEmpty()
   name: string;
-  @ApiProperty({ 
-    example: ['cln8z9p3a000008l49w9z5q1e', 'cln8z9p3b000108l49w9z5q1e'],
-    description: 'Массив ID ресторанов',
-    required: false
-  })
-  @IsArray()
+
+  @ApiProperty({ description: 'ID сети (опционально)', required: false })
+  @IsString()
   @IsOptional()
-  @IsString({ each: true })
-  restaurantIds?: string[];
+  networkId?: string;
 
   @ApiProperty({ 
-    example: ['cln8z9p3a000008l49w9z5q1e', 'cln8z9p3b000108l49w9z5q1e'],
-    description: 'Массив ID пользователей',
-    required: false
+    description: 'Массив ID ресторанов',
+    type: [String],
+    required: false 
   })
   @IsArray()
+  @ArrayMinSize(0)
   @IsOptional()
-  @IsString({ each: true })
-  userIds?: string[];
+  restaurantIds?: string[];
 }

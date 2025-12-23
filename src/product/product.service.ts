@@ -6,103 +6,6 @@ import { ProductDto } from './dto/product.dto';
 export class ProductService {
   constructor(private prisma: PrismaService) { }
 
-  async getAll(searchTerm?: string) {
-    if (searchTerm) return this.getSearchTermFilter(searchTerm);
-
-    return this.prisma.product.findMany({
-      orderBy: [
-        {
-          sortOrder: 'desc',
-        },
-        {
-          createdAt: 'desc',
-        }
-      ],
-      include: {
-        restaurantPrices: true,
-        category: true,
-        additives: true,
-        workshops: {
-          include: {
-            workshop: true
-          }
-        },
-        network: true,
-      },
-    });
-  }
-
-  private async getSearchTermFilter(searchTerm: string) {
-    return this.prisma.product.findMany({
-      where: {
-        OR: [
-          {
-            title: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-          {
-            description: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-          {
-            workshops: {
-              some: {
-                workshop: {
-                  name: {
-                    contains: searchTerm,
-                    mode: 'insensitive',
-                  }
-                }
-              }
-            }
-          },
-        ],
-      },
-      orderBy: [
-        {
-          sortOrder: 'desc',
-        },
-        {
-          createdAt: 'desc',
-        }
-      ],
-      include: {
-        restaurantPrices: true,
-        category: true,
-        additives: true,
-        workshops: {
-          include: {
-            workshop: true
-          }
-        },
-      },
-    });
-  }
-
-  async getById(id: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      include: {
-        restaurantPrices: true,
-        category: true,
-        additives: true,
-        workshops: {
-          include: {
-            workshop: true
-          }
-        },
-        network: true,
-      },
-    });
-
-    if (!product) throw new NotFoundException('Товар не найден');
-    return product;
-  }
-
   async create(dto: ProductDto) {
     const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, networkId, ...productData } = dto;
     if (networkId) {
@@ -386,33 +289,7 @@ export class ProductService {
     return this.getById(id);
   }
 
-  async delete(id: string) {
-    await this.getById(id);
 
-    await this.prisma.orderItem.deleteMany({
-      where: { productId: id }
-    });
-
-    await this.prisma.productDiscount.deleteMany({
-      where: { productId: id }
-    });
-
-    await this.prisma.productWorkshop.deleteMany({
-      where: { productId: id }
-    });
-
-    await this.prisma.restaurantProductPrice.deleteMany({
-      where: { productId: id },
-    });
-
-    await this.prisma.productIngredient.deleteMany({
-      where: { productId: id }
-    });
-
-    return this.prisma.product.delete({
-      where: { id },
-    });
-  }
   async getByCategory(categoryId: string) {
     return this.prisma.product.findMany({
       where: {
@@ -944,5 +821,444 @@ export class ProductService {
     });
   }
 
+
+  async getAll(searchTerm?: string) {
+    if (searchTerm) return this.getSearchTermFilter(searchTerm);
+
+    return this.prisma.product.findMany({
+      where: {
+        isUsed: true // Фильтруем только активные продукты
+      },
+      orderBy: [
+        {
+          sortOrder: 'desc',
+        },
+        {
+          createdAt: 'desc',
+        }
+      ],
+      include: {
+        restaurantPrices: true,
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+        network: true,
+      },
+    });
+  }
+
+  private async getSearchTermFilter(searchTerm: string) {
+    return this.prisma.product.findMany({
+      where: {
+        isUsed: true, // Фильтруем только активные продукты
+        OR: [
+          {
+            title: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+          {
+            description: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+          {
+            workshops: {
+              some: {
+                workshop: {
+                  name: {
+                    contains: searchTerm,
+                    mode: 'insensitive',
+                  }
+                }
+              }
+            }
+          },
+        ],
+      },
+      // ... остальной код
+    });
+  }
+
+  async getById(id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { 
+        id,
+        isUsed: true // Проверяем, что продукт активен
+      },
+      include: {
+        restaurantPrices: true,
+        category: true,
+        additives: true,
+        workshops: {
+          include: {
+            workshop: true
+          }
+        },
+        network: true,
+      },
+    });
+
+    if (!product) throw new NotFoundException('Товар не найден');
+    return product;
+  }
+
+  // Мягкое удаление (soft delete)
+  async delete(id: string) {
+    const product = await this.getById(id);
+    
+    // Вместо удаления устанавливаем isUsed = false
+    return this.prisma.product.update({
+      where: { id },
+      data: { isUsed: false },
+    });
+  }
+
+  // Массовое мягкое удаление
+  async deleteMultiple(productIds: string[]) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов для удаления');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true // Удаляем только активные продукты
+      },
+      data: {
+        isUsed: false
+      }
+    });
+
+    return {
+      message: `Удалено ${result.count} продуктов`,
+      deletedCount: result.count
+    };
+  }
+
+  // Массовая смена категории
+  async updateCategoryForMultiple(productIds: string[], categoryId: string) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    // Проверяем, существует ли категория (если указана)
+    if (categoryId) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: categoryId }
+      });
+      if (!category) {
+        throw new NotFoundException('Категория не найдена');
+      }
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true
+      },
+      data: {
+        categoryId: categoryId || null
+      }
+    });
+
+    return {
+      message: `Категория обновлена для ${result.count} продуктов`,
+      updatedCount: result.count
+    };
+  }
+
+  // Массовое назначение цехов
+  async assignWorkshopsToMultiple(productIds: string[], workshopIds: string[]) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    if (!workshopIds || workshopIds.length === 0) {
+      throw new BadRequestException('Не указаны ID цехов');
+    }
+
+    // Проверяем существование всех цехов
+    const workshops = await this.prisma.workshop.findMany({
+      where: {
+        id: {
+          in: workshopIds
+        }
+      }
+    });
+
+    if (workshops.length !== workshopIds.length) {
+      throw new NotFoundException('Некоторые цеха не найдены');
+    }
+
+    // Для каждого продукта обновляем связь с цехами
+    const updatePromises = productIds.map(async (productId) => {
+      // Удаляем существующие связи
+      await this.prisma.productWorkshop.deleteMany({
+        where: { productId }
+      });
+
+      // Создаем новые связи
+      const workshopConnections = workshopIds.map(workshopId => ({
+        productId,
+        workshopId
+      }));
+
+      return this.prisma.productWorkshop.createMany({
+        data: workshopConnections,
+        skipDuplicates: true
+      });
+    });
+
+    await Promise.all(updatePromises);
+
+    return {
+      message: `Цеха назначены для ${productIds.length} продуктов`,
+      updatedCount: productIds.length
+    };
+  }
+
+  // Массовое назначение модификаторов
+  async assignAdditivesToMultiple(productIds: string[], additiveIds: string[]) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    // Проверяем существование модификаторов (если указаны)
+    if (additiveIds && additiveIds.length > 0) {
+      const additives = await this.prisma.additive.findMany({
+        where: {
+          id: {
+            in: additiveIds
+          }
+        }
+      });
+
+      if (additives.length !== additiveIds.length) {
+        throw new NotFoundException('Некоторые модификаторы не найдены');
+      }
+    }
+
+    const updatePromises = productIds.map(async (productId) => {
+      return this.prisma.product.update({
+        where: { id: productId },
+        data: {
+          additives: additiveIds && additiveIds.length > 0 
+            ? { set: additiveIds.map(id => ({ id })) }
+            : { set: [] } // Очищаем, если пустой массив
+        }
+      });
+    });
+
+    await Promise.all(updatePromises);
+
+    return {
+      message: `Модификаторы обновлены для ${productIds.length} продуктов`,
+      updatedCount: productIds.length
+    };
+  }
+
+  // Массовое включение/отключение печати лейблов
+  async togglePrintLabelsForMultiple(productIds: string[], enable: boolean) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true
+      },
+      data: {
+        printLabels: enable
+      }
+    });
+
+    return {
+      message: `Печать лейблов ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+      updatedCount: result.count
+    };
+  }
+
+  // Массовое включение/отключение публикации на сайте
+  async togglePublishedOnWebsiteForMultiple(productIds: string[], enable: boolean) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true
+      },
+      data: {
+        publishedOnWebsite: enable
+      }
+    });
+
+    return {
+      message: `Публикация на сайте ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+      updatedCount: result.count
+    };
+  }
+
+  // Массовое включение/отключение публикации в приложении
+  async togglePublishedInAppForMultiple(productIds: string[], enable: boolean) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true
+      },
+      data: {
+        publishedInApp: enable
+      }
+    });
+
+    return {
+      message: `Публикация в приложении ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+      updatedCount: result.count
+    };
+  }
+
+  // Массовое включение/отключение стоп-листа
+  async toggleStopListForMultiple(productIds: string[], enable: boolean) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: true
+      },
+      data: {
+        isStopList: enable
+      }
+    });
+
+    return {
+      message: `Стоп-лист ${enable ? 'включен' : 'отключен'} для ${result.count} продуктов`,
+      updatedCount: result.count
+    };
+  }
+
+  // Восстановление удаленных продуктов
+  async restoreProducts(productIds: string[]) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Не указаны ID продуктов для восстановления');
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: {
+        id: {
+          in: productIds
+        },
+        isUsed: false // Восстанавливаем только удаленные
+      },
+      data: {
+        isUsed: true
+      }
+    });
+
+    return {
+      message: `Восстановлено ${result.count} продуктов`,
+      restoredCount: result.count
+    };
+  }
+
+  // Получение удаленных продуктов
+  async getDeletedProducts(searchTerm?: string) {
+    let whereCondition: any = {
+      isUsed: false
+    };
+
+    if (searchTerm) {
+      whereCondition = {
+        ...whereCondition,
+        OR: [
+          {
+            title: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+          {
+            description: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+        ]
+      };
+    }
+
+    return this.prisma.product.findMany({
+      where: whereCondition,
+      orderBy: {
+        updatedAt: 'desc'
+      },
+      include: {
+        category: true,
+        network: true
+      }
+    });
+  }
+
+  // Окончательное удаление (hard delete) - только для администратора
+  async hardDelete(id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id }
+    });
+
+    if (!product) {
+      throw new NotFoundException('Товар не найден');
+    }
+
+    await this.prisma.orderItem.deleteMany({
+      where: { productId: id }
+    });
+
+    await this.prisma.productDiscount.deleteMany({
+      where: { productId: id }
+    });
+
+    await this.prisma.productWorkshop.deleteMany({
+      where: { productId: id }
+    });
+
+    await this.prisma.restaurantProductPrice.deleteMany({
+      where: { productId: id },
+    });
+
+    await this.prisma.productIngredient.deleteMany({
+      where: { productId: id }
+    });
+
+    return this.prisma.product.delete({
+      where: { id },
+    });
+  }
 
 }
