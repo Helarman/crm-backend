@@ -823,7 +823,6 @@ export class ProductService {
 
 
   async getAll(searchTerm?: string) {
-    if (searchTerm) return this.getSearchTermFilter(searchTerm);
 
     return this.prisma.product.findMany({
       where: {
@@ -851,40 +850,6 @@ export class ProductService {
     });
   }
 
-  private async getSearchTermFilter(searchTerm: string) {
-    return this.prisma.product.findMany({
-      where: {
-        isUsed: true, // Фильтруем только активные продукты
-        OR: [
-          {
-            title: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-          {
-            description: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-          {
-            workshops: {
-              some: {
-                workshop: {
-                  name: {
-                    contains: searchTerm,
-                    mode: 'insensitive',
-                  }
-                }
-              }
-            }
-          },
-        ],
-      },
-      // ... остальной код
-    });
-  }
 
   async getById(id: string) {
     const product = await this.prisma.product.findUnique({
@@ -920,273 +885,416 @@ export class ProductService {
     });
   }
 
-  // Массовое мягкое удаление
-  async deleteMultiple(productIds: string[]) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов для удаления');
-    }
+  
 
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true // Удаляем только активные продукты
-      },
-      data: {
-        isUsed: false
-      }
-    });
-
-    return {
-      message: `Удалено ${result.count} продуктов`,
-      deletedCount: result.count
-    };
+  
+async assignWorkshopsToMultiple(productIds: string[], workshopIds: string[]) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
   }
 
-  // Массовая смена категории
-  async updateCategoryForMultiple(productIds: string[], categoryId: string) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
-    }
-
-    // Проверяем, существует ли категория (если указана)
-    if (categoryId) {
-      const category = await this.prisma.category.findUnique({
-        where: { id: categoryId }
-      });
-      if (!category) {
-        throw new NotFoundException('Категория не найдена');
-      }
-    }
-
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true
-      },
-      data: {
-        categoryId: categoryId || null
-      }
-    });
-
-    return {
-      message: `Категория обновлена для ${result.count} продуктов`,
-      updatedCount: result.count
-    };
+  if (!workshopIds || workshopIds.length === 0) {
+    throw new BadRequestException('Не указаны ID цехов');
   }
 
-  // Массовое назначение цехов
-  async assignWorkshopsToMultiple(productIds: string[], workshopIds: string[]) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
+  // Проверяем существование всех цехов (одним запросом)
+  const workshops = await this.prisma.workshop.findMany({
+    where: { id: { in: workshopIds } },
+    select: { id: true }
+  });
+
+  if (workshops.length !== workshopIds.length) {
+    const foundIds = workshops.map(w => w.id);
+    const missingIds = workshopIds.filter(id => !foundIds.includes(id));
+    throw new NotFoundException(`Цеха не найдены: ${missingIds.join(', ')}`);
+  }
+
+  // Удаляем старые связи для всех продуктов сразу
+  await this.prisma.productWorkshop.deleteMany({
+    where: { productId: { in: productIds } }
+  });
+
+  // Создаем новые связи пакетно
+  const workshopConnections: { productId: string; workshopId: string }[] = [];
+  
+  for (const productId of productIds) {
+    for (const workshopId of workshopIds) {
+      workshopConnections.push({ productId, workshopId });
     }
+  }
 
-    if (!workshopIds || workshopIds.length === 0) {
-      throw new BadRequestException('Не указаны ID цехов');
-    }
-
-    // Проверяем существование всех цехов
-    const workshops = await this.prisma.workshop.findMany({
-      where: {
-        id: {
-          in: workshopIds
-        }
-      }
-    });
-
-    if (workshops.length !== workshopIds.length) {
-      throw new NotFoundException('Некоторые цеха не найдены');
-    }
-
-    // Для каждого продукта обновляем связь с цехами
-    const updatePromises = productIds.map(async (productId) => {
-      // Удаляем существующие связи
-      await this.prisma.productWorkshop.deleteMany({
-        where: { productId }
-      });
-
-      // Создаем новые связи
-      const workshopConnections = workshopIds.map(workshopId => ({
-        productId,
-        workshopId
-      }));
-
-      return this.prisma.productWorkshop.createMany({
-        data: workshopConnections,
+  if (workshopConnections.length > 0) {
+    // Используем createMany с chunking для больших объемов
+    const batchSize = 1000; // Оптимальный размер пачки для PostgreSQL
+    for (let i = 0; i < workshopConnections.length; i += batchSize) {
+      const batch = workshopConnections.slice(i, i + batchSize);
+      await this.prisma.productWorkshop.createMany({
+        data: batch,
         skipDuplicates: true
       });
-    });
-
-    await Promise.all(updatePromises);
-
-    return {
-      message: `Цеха назначены для ${productIds.length} продуктов`,
-      updatedCount: productIds.length
-    };
+    }
   }
 
-  // Массовое назначение модификаторов
-  async assignAdditivesToMultiple(productIds: string[], additiveIds: string[]) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
-    }
+  return {
+    message: `Цеха назначены для ${productIds.length} продуктов`,
+    updatedCount: productIds.length,
+    connectionsCreated: workshopConnections.length
+  };
+}
 
-    // Проверяем существование модификаторов (если указаны)
-    if (additiveIds && additiveIds.length > 0) {
-      const additives = await this.prisma.additive.findMany({
-        where: {
-          id: {
-            in: additiveIds
+async assignAdditivesToMultiple(productIds: string[], additiveIds: string[]) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  // Если additiveIds пустой или не указан, очищаем связи
+  if (!additiveIds || additiveIds.length === 0) {
+    // Для очистки связей используем set: [] для каждого продукта
+    return await this.prisma.$transaction(async (tx) => {
+      const updatePromises = productIds.map(productId =>
+        tx.product.update({
+          where: { id: productId },
+          data: {
+            additives: { set: [] } // Очищаем все связи с добавками
           }
-        }
-      });
+        })
+      );
 
-      if (additives.length !== additiveIds.length) {
-        throw new NotFoundException('Некоторые модификаторы не найдены');
-      }
-    }
+      await Promise.all(updatePromises);
 
-    const updatePromises = productIds.map(async (productId) => {
-      return this.prisma.product.update({
+      return {
+        message: `Модификаторы очищены для ${productIds.length} продуктов`,
+        updatedCount: productIds.length
+      };
+    });
+  }
+
+  // Проверяем существование модификаторов одним запросом
+  const additives = await this.prisma.additive.findMany({
+    where: { id: { in: additiveIds } },
+    select: { id: true }
+  });
+
+  if (additives.length !== additiveIds.length) {
+    const foundIds = additives.map(a => a.id);
+    const missingIds = additiveIds.filter(id => !foundIds.includes(id));
+    throw new NotFoundException(`Модификаторы не найдены: ${missingIds.join(', ')}`);
+  }
+
+  // Проверяем существование продуктов одним запросом
+  const products = await this.prisma.product.findMany({
+    where: { id: { in: productIds }, isUsed: true },
+    select: { id: true }
+  });
+
+  if (products.length !== productIds.length) {
+    const foundIds = products.map(p => p.id);
+    const missingIds = productIds.filter(id => !foundIds.includes(id));
+    throw new NotFoundException(`Продукты не найдены или удалены: ${missingIds.join(', ')}`);
+  }
+
+  // Используем транзакцию для атомарности
+  return await this.prisma.$transaction(async (tx) => {
+    // Обновляем каждый продукт, устанавливая новые связи с добавками
+    const updatePromises = productIds.map(productId =>
+      tx.product.update({
         where: { id: productId },
         data: {
-          additives: additiveIds && additiveIds.length > 0 
-            ? { set: additiveIds.map(id => ({ id })) }
-            : { set: [] } // Очищаем, если пустой массив
+          additives: {
+            set: additiveIds.map(id => ({ id })) // Устанавливаем новые связи
+          }
         }
-      });
-    });
+      })
+    );
 
     await Promise.all(updatePromises);
 
     return {
-      message: `Модификаторы обновлены для ${productIds.length} продуктов`,
-      updatedCount: productIds.length
+      message: `Модификаторы назначены для ${productIds.length} продуктов`,
+      updatedCount: productIds.length,
+      additivesCount: additiveIds.length
     };
+  });
+}
+
+
+async deleteMultiple(productIds: string[]) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов для удаления');
   }
 
-  // Массовое включение/отключение печати лейблов
-  async togglePrintLabelsForMultiple(productIds: string[], enable: boolean) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
-    }
+  // Используем один updateMany вместо множества update
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: { isUsed: false }
+  });
 
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true
-      },
-      data: {
-        printLabels: enable
-      }
+  return {
+    message: `Удалено ${result.count} продуктов`,
+    deletedCount: result.count
+  };
+}
+
+async updateCategoryForMultiple(productIds: string[], categoryId: string) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  // Если categoryId указан, проверяем существование категории
+  if (categoryId) {
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { id: true }
     });
+    
+    if (!category) {
+      throw new NotFoundException('Категория не найдена');
+    }
+  }
+
+  // Обновляем все продукты одним запросом
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: {
+      categoryId: categoryId || null,
+      // Автоматически обновляем порядок сортировки при смене категории
+      sortOrder: undefined, // Будет установлен при следующем нормализации
+      clientSortOrder: undefined
+    }
+  });
+
+  return {
+    message: `Категория обновлена для ${result.count} продуктов`,
+    updatedCount: result.count
+  };
+}
+
+async togglePrintLabelsForMultiple(productIds: string[], enable: boolean) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: { printLabels: enable }
+  });
+
+  return {
+    message: `Печать лейблов ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+    updatedCount: result.count
+  };
+}
+
+async togglePublishedOnWebsiteForMultiple(productIds: string[], enable: boolean) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: { publishedOnWebsite: enable }
+  });
+
+  return {
+    message: `Публикация на сайте ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+    updatedCount: result.count
+  };
+}
+
+async togglePublishedInAppForMultiple(productIds: string[], enable: boolean) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: { publishedInApp: enable }
+  });
+
+  return {
+    message: `Публикация в приложении ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
+    updatedCount: result.count
+  };
+}
+
+async toggleStopListForMultiple(productIds: string[], enable: boolean) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
+  }
+
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: true
+    },
+    data: { isStopList: enable }
+  });
+
+  return {
+    message: `Стоп-лист ${enable ? 'включен' : 'отключен'} для ${result.count} продуктов`,
+    updatedCount: result.count
+  };
+}
+
+async restoreProducts(productIds: string[]) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов для восстановления');
+  }
+
+  const result = await this.prisma.product.updateMany({
+    where: {
+      id: { in: productIds },
+      isUsed: false
+    },
+    data: { isUsed: true }
+  });
+
+  return {
+    message: `Восстановлено ${result.count} продуктов`,
+    restoredCount: result.count
+  };
+}
+
+// Оптимизированная массовая операция для обновления порядка продуктов
+async batchUpdateProductOrders(orders: Array<{ productId: string; sortOrder: number }>) {
+  if (!orders || orders.length === 0) {
+    throw new BadRequestException('Не указаны данные для обновления порядка');
+  }
+
+  // Используем транзакцию для атомарности
+  return await this.prisma.$transaction(async (tx) => {
+    const updatePromises = orders.map(order =>
+      tx.product.update({
+        where: { id: order.productId },
+        data: { sortOrder: order.sortOrder }
+      })
+    );
+
+    await Promise.all(updatePromises);
 
     return {
-      message: `Печать лейблов ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
-      updatedCount: result.count
+      message: `Порядок обновлен для ${orders.length} продуктов`,
+      updatedCount: orders.length
     };
-  }
+  });
+}
 
-  // Массовое включение/отключение публикации на сайте
-  async togglePublishedOnWebsiteForMultiple(productIds: string[], enable: boolean) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
-    }
-
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true
-      },
-      data: {
-        publishedOnWebsite: enable
-      }
+// Массовое обновление цен в ресторанах
+async updateRestaurantPricesBatch(
+  productId: string, 
+  prices: Array<{ restaurantId: string; price: number; isStopList: boolean }>
+) {
+  // Используем транзакцию для атомарности
+  return await this.prisma.$transaction(async (tx) => {
+    // Удаляем старые цены
+    await tx.restaurantProductPrice.deleteMany({
+      where: { productId }
     });
 
-    return {
-      message: `Публикация на сайте ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
-      updatedCount: result.count
-    };
-  }
+    // Создаем новые цены пакетно
+    if (prices.length > 0) {
+      const priceData = prices.map(price => ({
+        productId,
+        restaurantId: price.restaurantId,
+        price: price.price,
+        isStopList: price.isStopList
+      }));
 
-  // Массовое включение/отключение публикации в приложении
-  async togglePublishedInAppForMultiple(productIds: string[], enable: boolean) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
+      // Разбиваем на пачки для больших объемов
+      const batchSize = 1000;
+      for (let i = 0; i < priceData.length; i += batchSize) {
+        const batch = priceData.slice(i, i + batchSize);
+        await tx.restaurantProductPrice.createMany({
+          data: batch
+        });
+      }
     }
 
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true
-      },
-      data: {
-        publishedInApp: enable
-      }
-    });
-
     return {
-      message: `Публикация в приложении ${enable ? 'включена' : 'отключена'} для ${result.count} продуктов`,
-      updatedCount: result.count
+      message: `Цены обновлены для ${prices.length} ресторанов`,
+      updatedCount: prices.length
     };
+  });
+}
+
+// Массовое обновление ингредиентов для нескольких продуктов
+async updateIngredientsForMultiple(
+  productIds: string[], 
+  ingredients: Array<{ inventoryItemId: string; quantity: number }>
+) {
+  if (!productIds || productIds.length === 0) {
+    throw new BadRequestException('Не указаны ID продуктов');
   }
 
-  // Массовое включение/отключение стоп-листа
-  async toggleStopListForMultiple(productIds: string[], enable: boolean) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов');
+  // Проверяем существование ингредиентов
+  const inventoryItemIds = ingredients.map(i => i.inventoryItemId);
+  const inventoryItems = await this.prisma.inventoryItem.findMany({
+    where: { id: { in: inventoryItemIds } },
+    select: { id: true }
+  });
+
+  if (inventoryItems.length !== inventoryItemIds.length) {
+    const foundIds = inventoryItems.map(i => i.id);
+    const missingIds = inventoryItemIds.filter(id => !foundIds.includes(id));
+    throw new NotFoundException(`Ингредиенты не найдены: ${missingIds.join(', ')}`);
+  }
+
+  return await this.prisma.$transaction(async (tx) => {
+    // Удаляем старые связи для всех продуктов
+    await tx.productIngredient.deleteMany({
+      where: { productId: { in: productIds } }
+    });
+
+    // Создаем новые связи пакетно
+    const ingredientConnections: Array<{
+      productId: string;
+      inventoryItemId: string;
+      quantity: number;
+    }> = [];
+
+    for (const productId of productIds) {
+      for (const ingredient of ingredients) {
+        ingredientConnections.push({
+          productId,
+          inventoryItemId: ingredient.inventoryItemId,
+          quantity: ingredient.quantity
+        });
+      }
     }
 
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: true
-      },
-      data: {
-        isStopList: enable
+    if (ingredientConnections.length > 0) {
+      const batchSize = 1000;
+      for (let i = 0; i < ingredientConnections.length; i += batchSize) {
+        const batch = ingredientConnections.slice(i, i + batchSize);
+        await tx.productIngredient.createMany({
+          data: batch,
+          skipDuplicates: true
+        });
       }
-    });
-
-    return {
-      message: `Стоп-лист ${enable ? 'включен' : 'отключен'} для ${result.count} продуктов`,
-      updatedCount: result.count
-    };
-  }
-
-  // Восстановление удаленных продуктов
-  async restoreProducts(productIds: string[]) {
-    if (!productIds || productIds.length === 0) {
-      throw new BadRequestException('Не указаны ID продуктов для восстановления');
     }
 
-    const result = await this.prisma.product.updateMany({
-      where: {
-        id: {
-          in: productIds
-        },
-        isUsed: false // Восстанавливаем только удаленные
-      },
-      data: {
-        isUsed: true
-      }
-    });
-
     return {
-      message: `Восстановлено ${result.count} продуктов`,
-      restoredCount: result.count
+      message: `Ингредиенты обновлены для ${productIds.length} продуктов`,
+      updatedCount: productIds.length,
+      connectionsCreated: ingredientConnections.length
     };
-  }
+  });
+}
 
   // Получение удаленных продуктов
   async getDeletedProducts(searchTerm?: string) {
