@@ -152,35 +152,68 @@ export class ProductService {
   return products.map(product => product.id);
 }
 
-  // Метод для получения продуктов по сети
-  async getProductsByNetwork(networkId: string) {
-    const network = await this.prisma.network.findUnique({
-      where: { id: networkId }
-    });
-    
-    if (!network) {
-      throw new NotFoundException('Сеть не найдена');
-    }
-
-    return this.prisma.product.findMany({
-      where: {
-        networkId: networkId
-      },
-      include: {
-        category: true,
-        additives: true,
-        workshops: {
-          include: {
-            workshop: true
-          }
-        },
-        restaurantPrices: true
-      },
-      orderBy: {
-        sortOrder: 'desc'
-      }
-    });
+async getProductsByNetwork(networkId: string) {
+  const network = await this.prisma.network.findUnique({
+    where: { id: networkId }
+  });
+  
+  if (!network) {
+    throw new NotFoundException('Сеть не найдена');
   }
+
+  return this.prisma.product.findMany({
+    where: {
+      networkId: networkId,
+      isUsed: true // Только активные продукты
+    },
+    include: {
+      category: true,
+      additives: true,
+      workshops: {
+        include: {
+          workshop: true
+        }
+      },
+      restaurantPrices: true
+    },
+    orderBy: {
+      sortOrder: 'desc'
+    }
+  });
+}
+
+// Метод для получения удаленных продуктов по сети (isUsed: false)
+async getDeletedProductsByNetwork(networkId: string) {
+  const network = await this.prisma.network.findUnique({
+    where: { id: networkId }
+  });
+  
+  if (!network) {
+    throw new NotFoundException('Сеть не найдена');
+  }
+
+  return this.prisma.product.findMany({
+    where: {
+      networkId: networkId,
+      isUsed: false // Только удаленные продукты
+    },
+    include: {
+      category: true,
+      additives: true,
+      workshops: {
+        include: {
+          workshop: true
+        }
+      },
+      restaurantPrices: true,
+      network: true
+    },
+    orderBy: {
+      updatedAt: 'desc'
+    }
+  });
+}
+
 
   async update(id: string, dto: ProductDto) {
     const { restaurantPrices, additives, categoryId, workshopIds, ingredients, sortOrder, clientSortOrder, networkId, ...productData } = dto;
@@ -294,7 +327,8 @@ export class ProductService {
     return this.prisma.product.findMany({
       where: {
         categoryId,
-        publishedOnWebsite: true
+        publishedOnWebsite: true,
+         isUsed: true
       },
 
       include: {
@@ -802,7 +836,7 @@ export class ProductService {
       : { categoryId };
 
     return this.prisma.product.findMany({
-      where: whereCondition,
+      where: {...whereCondition,  isUsed: true },
       include: {
         restaurantPrices: true,
         category: true,
@@ -826,7 +860,7 @@ export class ProductService {
 
     return this.prisma.product.findMany({
       where: {
-        isUsed: true // Фильтруем только активные продукты
+        isUsed: true 
       },
       orderBy: [
         {

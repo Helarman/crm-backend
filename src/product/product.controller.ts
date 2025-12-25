@@ -493,4 +493,12 @@ export class ProductController {
 	async hardDelete(@Param('id') id: string) {
 	return this.productService.hardDelete(id);
 	}
+	@Get('deleted/by-network/:networkId')
+	@ApiOperation({ summary: 'Получить удаленные продукты по сети' })
+	@ApiParam({ name: 'networkId', description: 'ID сети' })
+	@ApiOkResponse({ description: 'Удаленные продукты успешно получены' })
+	@ApiNotFoundResponse({ description: 'Сеть не найдена' })
+	async getDeletedProductsByNetwork(@Param('networkId') networkId: string) {
+	return this.productService.getDeletedProductsByNetwork(networkId);
+	}
 }
