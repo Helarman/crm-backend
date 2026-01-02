@@ -100,6 +100,9 @@ export class CreateStorageLocationDto {
 
   @ApiProperty({ required: false })
   description?: string;
+
+  @ApiProperty({ required: false })
+  networkId?: string;
 }
 
 export class UpdateStorageLocationDto {
@@ -162,12 +165,17 @@ export class CreateInventoryItemDto {
   cost?: number;
 
   @ApiProperty({ required: false })
-  categoryId?: string; 
-  
+  categoryId?: string;
+
   @ApiProperty({ required: false })
   productId?: string;
   addToWarehouseId?: string;
   initialQuantity?: number;
+  @ApiProperty({ required: false })
+  networkId?: string;
+
+  @ApiProperty({ required: false })
+  premixId?: string;
 
 }
 
@@ -189,6 +197,12 @@ export class UpdateInventoryItemDto {
 
   @ApiProperty({ required: false })
   isActive?: boolean;
+  @ApiProperty({ required: false })
+  premixId?: string;
+
+  @ApiProperty({ required: false })
+  networkId?: string;
+
 }
 
 export class WarehouseItemDto implements Partial<WarehouseItem> {
@@ -222,17 +236,17 @@ export class WarehouseItemDto implements Partial<WarehouseItem> {
 
 export class CreateWarehouseItemDto {
   @ApiProperty()
-  warehouseId: string; 
-  
+  warehouseId: string;
+
   @ApiProperty()
   inventoryItemId: string;
-  
+
   @ApiProperty({ required: false })
   storageLocationId?: string;
-  
+
   @ApiProperty()
   quantity: number;
-  
+
   @ApiProperty({ required: false })
   minQuantity?: number;
 
@@ -255,7 +269,7 @@ export class UpdateWarehouseItemDto {
   minQuantity?: number;
 
   @ApiProperty({ required: false })
-  cost?: number; 
+  cost?: number;
 
 }
 
@@ -280,7 +294,7 @@ export class InventoryTransactionDto implements Partial<InventoryTransaction> {
 
   @ApiProperty({ required: false })
   totalCost?: number;
-  
+
   @ApiProperty()
   previousQuantity: number;
 
@@ -308,13 +322,13 @@ export class PremixDto {
   yield: number;
   createdAt: Date;
   updatedAt: Date;
-  
+
   ingredients: PremixIngredientDto[];
   inventoryItem?: InventoryItemDto;
-  
+
   warehouseItem?: WarehouseItemDto;
 }
-  export class WarehousePremixDto extends PremixDto {
+export class WarehousePremixDto extends PremixDto {
   warehouseItem?: WarehouseItemDto;
   availableQuantity: number;
 }
@@ -324,6 +338,8 @@ export class CreatePremixDto {
   description?: string;
   unit: string;
   yield?: number;
+  @ApiProperty({ required: false })
+  networkId?: string;
   ingredients: AddPremixIngredientDto[];
 }
 
@@ -403,42 +419,42 @@ export class BulkCreateWarehouseItemsDto {
   @ApiProperty({ description: 'ID ресторана' })
   restaurantId: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID склада (опционально, если не указан - будет использован склад ресторана)',
-    required: false 
+    required: false
   })
   warehouseId?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Количество по умолчанию для всех товаров',
     required: false,
-    default: 0 
+    default: 0
   })
   defaultQuantity?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Минимальное количество по умолчанию',
-    required: false 
+    required: false
   })
   defaultMinQuantity?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID места хранения по умолчанию',
-    required: false 
+    required: false
   })
   defaultStorageLocationId?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Список конкретных inventoryItem IDs для создания (опционально)',
     required: false,
-    type: [String] 
+    type: [String]
   })
   specificItemIds?: string[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Пропускать уже существующие товары на складе',
     required: false,
-    default: true 
+    default: true
   })
   skipExisting?: boolean;
 }
@@ -448,29 +464,29 @@ export class AddMissingItemsDto {
   @ApiProperty({ description: 'ID склада' })
   warehouseId: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Количество по умолчанию для добавляемых товаров',
     required: false,
-    default: 0 
+    default: 0
   })
   defaultQuantity?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Минимальное количество по умолчанию',
-    required: false 
+    required: false
   })
   defaultMinQuantity?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID места хранения по умолчанию',
-    required: false 
+    required: false
   })
   defaultStorageLocationId?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Игнорировать ошибки для отдельных товаров и продолжать',
     required: false,
-    default: false 
+    default: false
   })
   ignoreErrors?: boolean;
 }
@@ -560,6 +576,9 @@ export class CreateInventoryCategoryDto {
 
   @ApiProperty({ required: false, default: true })
   isActive?: boolean;
+
+  @ApiProperty({ required: false })
+  networkId?: string;
 }
 
 export class UpdateInventoryCategoryDto {
@@ -580,4 +599,27 @@ export class UpdateInventoryCategoryDto {
 
   @ApiProperty({ required: false })
   isActive?: boolean;
+}
+
+
+export class BulkAssignNetworkDto {
+  @ApiProperty({
+    description: 'ID сети для присвоения',
+    required: true
+  })
+  networkId: string;
+
+  @ApiProperty({
+    description: 'Список ID инвентарных позиций',
+    required: true,
+    type: [String]
+  })
+  inventoryItemIds: string[];
+
+  @ApiProperty({
+    description: 'Заменить сеть у всех позиций (если true) или только у тех, у кого нет сети (если false)',
+    required: false,
+    default: false
+  })
+  replaceExisting?: boolean;
 }

@@ -1,46 +1,46 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { InventoryTransactionType, Prisma } from '@prisma/client';
-import { AddMissingItemsDto, BulkCreateWarehouseItemsDto, CreateInventoryTransactionDto, CreateWarehouseDto, CreateWarehouseItemDto } from './dto/warehouse.dto';
+import { AddMissingItemsDto, BulkAssignNetworkDto, BulkCreateWarehouseItemsDto, CreateInventoryTransactionDto, CreateWarehouseDto, CreateWarehouseItemDto } from './dto/warehouse.dto';
 
 @Injectable()
 export class WarehouseService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
   private readonly logger = new Logger(WarehouseService.name);
   // ==================== Warehouse Methods ====================
 
- async createWarehouse(data: CreateWarehouseDto) {
-  return this.prisma.$transaction(async (prisma) => {
-    const warehouse = await prisma.warehouse.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        restaurant: {
-          connect: { id: data.restaurantId }
+  async createWarehouse(data: CreateWarehouseDto) {
+    return this.prisma.$transaction(async (prisma) => {
+      const warehouse = await prisma.warehouse.create({
+        data: {
+          name: data.name,
+          description: data.description,
+          restaurant: {
+            connect: { id: data.restaurantId }
+          }
+        }
+      });
+
+      // Добавляем initial inventory если указано
+      if (data.initialInventory && data.initialInventory.length > 0) {
+        for (const item of data.initialInventory) {
+          await prisma.warehouseItem.create({
+            data: {
+              warehouse: { connect: { id: warehouse.id } },
+              inventoryItem: { connect: { id: item.inventoryItemId } },
+              quantity: item.quantity || 0,
+              minQuantity: item.minQuantity,
+              storageLocation: item.storageLocationId ? {
+                connect: { id: item.storageLocationId }
+              } : undefined
+            }
+          });
         }
       }
+
+      return this.getWarehouseById(warehouse.id);
     });
-
-    // Добавляем initial inventory если указано
-    if (data.initialInventory && data.initialInventory.length > 0) {
-      for (const item of data.initialInventory) {
-        await prisma.warehouseItem.create({
-          data: {
-            warehouse: { connect: { id: warehouse.id } },
-            inventoryItem: { connect: { id: item.inventoryItemId } },
-            quantity: item.quantity || 0,
-            minQuantity: item.minQuantity,
-            storageLocation: item.storageLocationId ? {
-              connect: { id: item.storageLocationId }
-            } : undefined
-          }
-        });
-      }
-    }
-
-    return this.getWarehouseById(warehouse.id);
-  });
-}
+  }
 
 
 
@@ -105,11 +105,6 @@ export class WarehouseService {
 
   // ==================== Storage Location Methods ====================
 
-  async createStorageLocation(data: Prisma.StorageLocationCreateInput) {
-    return this.prisma.storageLocation.create({
-      data,
-    });
-  }
 
   async getStorageLocationById(id: string) {
     return this.prisma.storageLocation.findUnique({
@@ -148,25 +143,36 @@ export class WarehouseService {
   async createInventoryItem(data: Prisma.InventoryItemCreateInput & {
     initialQuantity?: number;
     categoryId?: string;
+    networkId?: string;
   }) {
-    const { initialQuantity, categoryId, ...inventoryData } = data;
-    
+    const { initialQuantity, categoryId, networkId, ...inventoryData } = data;
+
     return this.prisma.$transaction(async (prisma) => {
-      // Проверяем существование имени
-      const existingItem = await prisma.inventoryItem.findUnique({
-        where: { name: inventoryData.name }
+      const whereCondition: Prisma.InventoryItemWhereInput = {
+        name: inventoryData.name
+      };
+
+      if (networkId) {
+        whereCondition.networkId = networkId;
+      }
+
+      const existingItem = await prisma.inventoryItem.findFirst({
+        where: whereCondition
       });
 
       if (existingItem) {
-        throw new Error('Inventory item with this name already exists');
+        throw new Error('Inventory item with this name already exists in this network');
       }
 
-      // Создаем inventory item
+      // Создаем inventory item с сетью
       const inventoryItem = await prisma.inventoryItem.create({
         data: {
           ...inventoryData,
           category: categoryId ? {
             connect: { id: categoryId }
+          } : undefined,
+          network: networkId ? {
+            connect: { id: networkId }
           } : undefined
         }
       });
@@ -178,8 +184,6 @@ export class WarehouseService {
 
       // Используем Promise.all для параллельного создания
       await Promise.all(allWarehouses.map(async (warehouse) => {
-        console.log("Creating for warehouse:", warehouse.id, "with item:", inventoryItem.id);
-        
         await prisma.warehouseItem.create({
           data: {
             warehouse: { connect: { id: warehouse.id } },
@@ -194,141 +198,141 @@ export class WarehouseService {
     });
   }
 
-async getWarehouseCoverage(warehouseId: string) {
-  const totalItems = await this.prisma.inventoryItem.count({
-    where: { isActive: true }
-  });
+  async getWarehouseCoverage(warehouseId: string) {
+    const totalItems = await this.prisma.inventoryItem.count({
+      where: { isActive: true }
+    });
 
-  const itemsInWarehouse = await this.prisma.warehouseItem.count({
-    where: { warehouseId }
-  });
+    const itemsInWarehouse = await this.prisma.warehouseItem.count({
+      where: { warehouseId }
+    });
 
-  const missingItems = await this.prisma.inventoryItem.findMany({
-    where: {
-      isActive: true,
-      warehouseItems: {
-        none: {
-          warehouseId: warehouseId
+    const missingItems = await this.prisma.inventoryItem.findMany({
+      where: {
+        isActive: true,
+        warehouseItems: {
+          none: {
+            warehouseId: warehouseId
+          }
         }
-      }
-    },
-    select: {
-      id: true,
-      name: true,
-      unit: true
-    },
-    orderBy: { name: 'asc' }
-  });
+      },
+      select: {
+        id: true,
+        name: true,
+        unit: true
+      },
+      orderBy: { name: 'asc' }
+    });
 
-  return {
-    totalActiveItems: totalItems,
-    itemsInWarehouse: itemsInWarehouse,
-    coveragePercentage: totalItems > 0 ? Math.round((itemsInWarehouse / totalItems) * 100) : 0,
-    missingItems: missingItems,
-    missingCount: missingItems.length
-  };
-}
-
-async addMissingItemsToWarehouse(data: AddMissingItemsDto) {
-  // Сначала получаем список missing items вне транзакции
-  const missingItems = await this.prisma.inventoryItem.findMany({
-    where: {
-      isActive: true,
-      warehouseItems: {
-        none: {
-          warehouseId: data.warehouseId
-        }
-      }
-    },
-    select: {
-      id: true,
-      name: true,
-      unit: true
-    },
-    orderBy: { name: 'asc' }
-  });
-
-  if (missingItems.length === 0) {
     return {
-      status: 'success',
-      message: 'No missing items found for this warehouse',
-      totalMissing: 0,
-      added: 0,
-      errors: 0,
-      details: []
+      totalActiveItems: totalItems,
+      itemsInWarehouse: itemsInWarehouse,
+      coveragePercentage: totalItems > 0 ? Math.round((itemsInWarehouse / totalItems) * 100) : 0,
+      missingItems: missingItems,
+      missingCount: missingItems.length
     };
   }
 
-  const results = {
-    totalMissing: missingItems.length,
-    added: 0,
-    errors: 0,
-    details: [] as Array<{
-      inventoryItemId: string;
-      inventoryItemName: string;
-      status: 'added' | 'error';
-      error?: string;
-    }>
-  };
-
-  // Обрабатываем каждый товар отдельно, без общей транзакции
-  for (const item of missingItems) {
-    try {
-      // Используем отдельную транзакцию для каждого товара
-      await this.prisma.$transaction(async (prisma) => {
-        await prisma.warehouseItem.create({
-          data: {
-            warehouse: { connect: { id: data.warehouseId } },
-            inventoryItem: { connect: { id: item.id } },
-            quantity: data.defaultQuantity || 0,
-            minQuantity: data.defaultMinQuantity,
-            storageLocation: data.defaultStorageLocationId ? {
-              connect: { id: data.defaultStorageLocationId }
-            } : undefined
+  async addMissingItemsToWarehouse(data: AddMissingItemsDto) {
+    // Сначала получаем список missing items вне транзакции
+    const missingItems = await this.prisma.inventoryItem.findMany({
+      where: {
+        isActive: true,
+        warehouseItems: {
+          none: {
+            warehouseId: data.warehouseId
           }
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        unit: true
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    if (missingItems.length === 0) {
+      return {
+        status: 'success',
+        message: 'No missing items found for this warehouse',
+        totalMissing: 0,
+        added: 0,
+        errors: 0,
+        details: []
+      };
+    }
+
+    const results = {
+      totalMissing: missingItems.length,
+      added: 0,
+      errors: 0,
+      details: [] as Array<{
+        inventoryItemId: string;
+        inventoryItemName: string;
+        status: 'added' | 'error';
+        error?: string;
+      }>
+    };
+
+    // Обрабатываем каждый товар отдельно, без общей транзакции
+    for (const item of missingItems) {
+      try {
+        // Используем отдельную транзакцию для каждого товара
+        await this.prisma.$transaction(async (prisma) => {
+          await prisma.warehouseItem.create({
+            data: {
+              warehouse: { connect: { id: data.warehouseId } },
+              inventoryItem: { connect: { id: item.id } },
+              quantity: data.defaultQuantity || 0,
+              minQuantity: data.defaultMinQuantity,
+              storageLocation: data.defaultStorageLocationId ? {
+                connect: { id: data.defaultStorageLocationId }
+              } : undefined
+            }
+          });
         });
-      });
 
-      results.added++;
-      results.details.push({
-        inventoryItemId: item.id,
-        inventoryItemName: item.name,
-        status: 'added'
-      });
+        results.added++;
+        results.details.push({
+          inventoryItemId: item.id,
+          inventoryItemName: item.name,
+          status: 'added'
+        });
 
-    } catch (error) {
-      results.errors++;
-      results.details.push({
-        inventoryItemId: item.id,
-        inventoryItemName: item.name,
-        status: 'error',
-        error: error.message
-      });
+      } catch (error) {
+        results.errors++;
+        results.details.push({
+          inventoryItemId: item.id,
+          inventoryItemName: item.name,
+          status: 'error',
+          error: error.message
+        });
 
-      // Если не игнорировать ошибки - прерываем выполнение
-      if (!data.ignoreErrors) {
-        throw error;
+        // Если не игнорировать ошибки - прерываем выполнение
+        if (!data.ignoreErrors) {
+          throw error;
+        }
       }
     }
+
+    return {
+      status: results.errors > 0 ? 'partial' : 'success',
+      message: `Added ${results.added} of ${results.totalMissing} missing items`,
+      ...results
+    };
   }
 
-  return {
-    status: results.errors > 0 ? 'partial' : 'success',
-    message: `Added ${results.added} of ${results.totalMissing} missing items`,
-    ...results
-  };
-}
-
-async getAllInventoryItems() {
-   const result = await this.prisma.inventoryItem.findMany();
+  async getAllInventoryItems() {
+    const result = await this.prisma.inventoryItem.findMany();
     return result;
-}
+  }
 
   async getInventoryItemById(id: string) {
     return this.prisma.inventoryItem.findUnique({
       where: { id },
       include: {
-        category:true,
+        category: true,
         product: true,
         premix: true,
         warehouseItems: {
@@ -352,6 +356,34 @@ async getAllInventoryItems() {
   }
 
   async updateInventoryItem(id: string, data: Prisma.InventoryItemUpdateInput) {
+    // Если меняется имя или сеть, проверяем уникальность
+    if (data.name || data.network) {
+      const currentItem = await this.prisma.inventoryItem.findUnique({
+        where: { id },
+        select: { name: true, networkId: true }
+      });
+
+      if (!currentItem) {
+        throw new Error('Inventory item not found');
+      }
+
+      const newName = data.name as string || currentItem.name;
+      const newNetworkId = (data.network as any)?.connect?.id || currentItem.networkId;
+
+      // Проверяем уникальность имени в рамках сети
+      const duplicate = await this.prisma.inventoryItem.findFirst({
+        where: {
+          name: newName,
+          networkId: newNetworkId,
+          id: { not: id }
+        }
+      });
+
+      if (duplicate) {
+        throw new Error('Inventory item with this name already exists in this network');
+      }
+    }
+
     return this.prisma.inventoryItem.update({
       where: { id },
       data,
@@ -411,7 +443,7 @@ async getAllInventoryItems() {
           connect: { id: data.warehouseId }
         },
         inventoryItem: {
-          connect: { id: data.inventoryItemId } 
+          connect: { id: data.inventoryItemId }
         },
         storageLocation: data.storageLocationId ? {
           connect: { id: data.storageLocationId }
@@ -419,7 +451,7 @@ async getAllInventoryItems() {
       }
     });
   }
-  
+
   async getWarehouseItemById(id: string) {
     return this.prisma.warehouseItem.findUnique({
       where: { id },
@@ -446,72 +478,56 @@ async getAllInventoryItems() {
 
   // ==================== Inventory Transaction Methods ====================
 
-async createTransaction(data: {
-  inventoryItemId: string;
-  warehouseId: string;
-  warehouseItemId?: string;
-  targetWarehouseId?: string;
-  type: InventoryTransactionType;
-  quantity: number;
-  unitCost?: number;
-  userId?: string;
-  reason?: string;
-  documentId?: string;
-}) {
-  return this.prisma.$transaction(async (prisma) => {
-    // Валидация для трансферов
-    if (data.type === 'TRANSFER' && !data.targetWarehouseId) {
-      throw new Error('Target warehouse is required for transfers');
-    }
-
-    if (data.type === 'TRANSFER' && data.warehouseId === data.targetWarehouseId) {
-      throw new Error('Cannot transfer to the same warehouse');
-    }
-
-    // 1. Находим или создаем warehouse item
-    let warehouseItem: any;
-    
-    if (data.warehouseItemId) {
-      warehouseItem = await prisma.warehouseItem.findUnique({
-        where: { id: data.warehouseItemId },
-        select: {
-          id: true,
-          quantity: true,
-          reserved: true,
-          warehouseId: true,
-          cost: true,
-          inventoryItemId: true
-        }
-      });
-
-      if (!warehouseItem) {
-        throw new Error('Warehouse item not found');
+  async createTransaction(data: {
+    inventoryItemId: string;
+    warehouseId: string;
+    warehouseItemId?: string;
+    targetWarehouseId?: string;
+    type: InventoryTransactionType;
+    quantity: number;
+    unitCost?: number;
+    userId?: string;
+    reason?: string;
+    documentId?: string;
+  }) {
+    return this.prisma.$transaction(async (prisma) => {
+      // Валидация для трансферов
+      if (data.type === 'TRANSFER' && !data.targetWarehouseId) {
+        throw new Error('Target warehouse is required for transfers');
       }
 
-      if (warehouseItem.inventoryItemId !== data.inventoryItemId) {
-        throw new Error('Warehouse item does not match inventory item');
+      if (data.type === 'TRANSFER' && data.warehouseId === data.targetWarehouseId) {
+        throw new Error('Cannot transfer to the same warehouse');
       }
-    } else {
-      warehouseItem = await prisma.warehouseItem.findFirst({
-        where: {
-          inventoryItemId: data.inventoryItemId,
-          warehouseId: data.warehouseId
-        },
-        select: {
-          id: true,
-          quantity: true,
-          reserved: true,
-          warehouseId: true,
-          inventoryItemId: true
-        }
-      });
 
-      if (!warehouseItem) {
-        warehouseItem = await prisma.warehouseItem.create({
-          data: {
-            warehouse: { connect: { id: data.warehouseId } },
-            inventoryItem: { connect: { id: data.inventoryItemId } },
-            quantity: 0
+      // 1. Находим или создаем warehouse item
+      let warehouseItem: any;
+
+      if (data.warehouseItemId) {
+        warehouseItem = await prisma.warehouseItem.findUnique({
+          where: { id: data.warehouseItemId },
+          select: {
+            id: true,
+            quantity: true,
+            reserved: true,
+            warehouseId: true,
+            cost: true,
+            inventoryItemId: true
+          }
+        });
+
+        if (!warehouseItem) {
+          throw new Error('Warehouse item not found');
+        }
+
+        if (warehouseItem.inventoryItemId !== data.inventoryItemId) {
+          throw new Error('Warehouse item does not match inventory item');
+        }
+      } else {
+        warehouseItem = await prisma.warehouseItem.findFirst({
+          where: {
+            inventoryItemId: data.inventoryItemId,
+            warehouseId: data.warehouseId
           },
           select: {
             id: true,
@@ -521,66 +537,67 @@ async createTransaction(data: {
             inventoryItemId: true
           }
         });
-      }
-    }
 
-    // 2. Рассчитываем новое количество (УБИРАЕМ ПРОВЕРКИ НА ОТРИЦАТЕЛЬНЫЕ ЗНАЧЕНИЯ)
-    let newQuantity: number;
-    let newCost: number | null = warehouseItem.cost;
-    let targetWarehouseItem: any = null;
-    let totalCost = data.unitCost ? data.unitCost * data.quantity : null;
-
-    switch (data.type) {
-      case 'RECEIPT':
-        newQuantity = warehouseItem.quantity + data.quantity;
-        
-        // Расчет средней взвешенной стоимости
-        if (data.unitCost && warehouseItem.cost) {
-          const currentTotalCost = warehouseItem.quantity * warehouseItem.cost;
-          const newTotalCost = currentTotalCost + (data.quantity * data.unitCost);
-          newCost = newTotalCost / newQuantity;
-        } else if (data.unitCost) {
-          // Первое поступление с указанной стоимостью
-          newCost = data.unitCost;
-        }
-        break;
-        
-      case 'WRITE_OFF':
-        newQuantity = warehouseItem.quantity - data.quantity;
-        // Стоимость при списании остается прежней (FIFO/LIFO можно реализовать отдельно)
-        break;
-        
-      case 'CORRECTION':
-        newQuantity = data.quantity;
-        if (data.unitCost) {
-          newCost = data.unitCost;
-        }
-        break;
-        
-      case 'TRANSFER':
-        newQuantity = warehouseItem.quantity - data.quantity;
-        // Для трансферов стоимость остается прежней
-        
-        if (data.targetWarehouseId) {
-          targetWarehouseItem = await prisma.warehouseItem.findFirst({
-            where: {
-              inventoryItemId: data.inventoryItemId,
-              warehouseId: data.targetWarehouseId
+        if (!warehouseItem) {
+          warehouseItem = await prisma.warehouseItem.create({
+            data: {
+              warehouse: { connect: { id: data.warehouseId } },
+              inventoryItem: { connect: { id: data.inventoryItemId } },
+              quantity: 0
             },
             select: {
               id: true,
               quantity: true,
-              cost: true
+              reserved: true,
+              warehouseId: true,
+              inventoryItemId: true
             }
           });
+        }
+      }
 
-          if (!targetWarehouseItem) {
-            targetWarehouseItem = await prisma.warehouseItem.create({
-              data: {
-                warehouse: { connect: { id: data.targetWarehouseId! } },
-                inventoryItem: { connect: { id: data.inventoryItemId } },
-                quantity: 0,
-                cost: warehouseItem.cost // Передаем текущую стоимость
+      // 2. Рассчитываем новое количество (УБИРАЕМ ПРОВЕРКИ НА ОТРИЦАТЕЛЬНЫЕ ЗНАЧЕНИЯ)
+      let newQuantity: number;
+      let newCost: number | null = warehouseItem.cost;
+      let targetWarehouseItem: any = null;
+      let totalCost = data.unitCost ? data.unitCost * data.quantity : null;
+
+      switch (data.type) {
+        case 'RECEIPT':
+          newQuantity = warehouseItem.quantity + data.quantity;
+
+          // Расчет средней взвешенной стоимости
+          if (data.unitCost && warehouseItem.cost) {
+            const currentTotalCost = warehouseItem.quantity * warehouseItem.cost;
+            const newTotalCost = currentTotalCost + (data.quantity * data.unitCost);
+            newCost = newTotalCost / newQuantity;
+          } else if (data.unitCost) {
+            // Первое поступление с указанной стоимостью
+            newCost = data.unitCost;
+          }
+          break;
+
+        case 'WRITE_OFF':
+          newQuantity = warehouseItem.quantity - data.quantity;
+          // Стоимость при списании остается прежней (FIFO/LIFO можно реализовать отдельно)
+          break;
+
+        case 'CORRECTION':
+          newQuantity = data.quantity;
+          if (data.unitCost) {
+            newCost = data.unitCost;
+          }
+          break;
+
+        case 'TRANSFER':
+          newQuantity = warehouseItem.quantity - data.quantity;
+          // Для трансферов стоимость остается прежней
+
+          if (data.targetWarehouseId) {
+            targetWarehouseItem = await prisma.warehouseItem.findFirst({
+              where: {
+                inventoryItemId: data.inventoryItemId,
+                warehouseId: data.targetWarehouseId
               },
               select: {
                 id: true,
@@ -588,239 +605,218 @@ async createTransaction(data: {
                 cost: true
               }
             });
+
+            if (!targetWarehouseItem) {
+              targetWarehouseItem = await prisma.warehouseItem.create({
+                data: {
+                  warehouse: { connect: { id: data.targetWarehouseId! } },
+                  inventoryItem: { connect: { id: data.inventoryItemId } },
+                  quantity: 0,
+                  cost: warehouseItem.cost // Передаем текущую стоимость
+                },
+                select: {
+                  id: true,
+                  quantity: true,
+                  cost: true
+                }
+              });
+            }
           }
+          break;
+      }
+      // 3. Создаем транзакцию
+      const transaction = await prisma.inventoryTransaction.create({
+        data: {
+          type: data.type,
+          quantity: data.quantity,
+          previousQuantity: warehouseItem.quantity,
+          newQuantity,
+          reason: data.reason,
+          unitCost: data.unitCost,
+          totalCost,
+          documentId: data.documentId,
+          inventoryItem: {
+            connect: { id: data.inventoryItemId }
+          },
+          warehouseItem: {
+            connect: { id: warehouseItem.id }
+          },
+          warehouse: {
+            connect: { id: data.warehouseId }
+          },
+          targetWarehouse: data.targetWarehouseId ? {
+            connect: { id: data.targetWarehouseId }
+          } : undefined,
+          user: data.userId ? {
+            connect: { id: data.userId }
+          } : undefined
         }
-        break;
-    }
-    // 3. Создаем транзакцию
-    const transaction = await prisma.inventoryTransaction.create({
-      data: {
-        type: data.type,
-        quantity: data.quantity,
-        previousQuantity: warehouseItem.quantity,
-        newQuantity,
-        reason: data.reason,
-        unitCost: data.unitCost,
-        totalCost,
-        documentId: data.documentId,
-        inventoryItem: {
-          connect: { id: data.inventoryItemId }
-        },
-        warehouseItem: {
-          connect: { id: warehouseItem.id }
-        },
-        warehouse: {
-          connect: { id: data.warehouseId }
-        },
-        targetWarehouse: data.targetWarehouseId ? {
-          connect: { id: data.targetWarehouseId }
-        } : undefined,
-        user: data.userId ? {
-          connect: { id: data.userId }
-        } : undefined
+      });
+
+      // 4. Обновляем количество и стоимость
+      const updateData: any = { quantity: newQuantity };
+      if (newCost !== null && newCost !== undefined) {
+        updateData.cost = newCost;
       }
+
+      if (data.type !== 'TRANSFER') {
+        await prisma.warehouseItem.update({
+          where: { id: warehouseItem.id },
+          data: updateData
+        });
+      } else if (data.targetWarehouseId && targetWarehouseItem) {
+        // Для трансферов обновляем оба склада
+        await prisma.warehouseItem.update({
+          where: { id: warehouseItem.id },
+          data: updateData
+        });
+
+        // Рассчитываем стоимость для целевого склада
+        const targetUpdateData: any = {
+          quantity: targetWarehouseItem.quantity + data.quantity
+        };
+
+        if (warehouseItem.cost) {
+          const currentTargetTotalCost = targetWarehouseItem.quantity * (targetWarehouseItem.cost || 0);
+          const transferTotalCost = data.quantity * warehouseItem.cost;
+          const newTargetTotalCost = currentTargetTotalCost + transferTotalCost;
+          const newTargetCost = newTargetTotalCost / (targetWarehouseItem.quantity + data.quantity);
+          targetUpdateData.cost = newTargetCost;
+        }
+
+        await prisma.warehouseItem.update({
+          where: { id: targetWarehouseItem.id },
+          data: targetUpdateData
+        });
+      }
+
+      return transaction;
     });
+  }
 
-  // 4. Обновляем количество и стоимость
-    const updateData: any = { quantity: newQuantity };
-    if (newCost !== null && newCost !== undefined) {
-      updateData.cost = newCost;
+
+
+  async getInventoryTransactionById(id: string) {
+    return this.prisma.inventoryTransaction.findUnique({
+      where: { id },
+      include: {
+        inventoryItem: true,
+        warehouseItem: {
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
+        },
+        warehouse: true,
+        targetWarehouse: true,
+        user: true,
+      },
+    });
+  }
+
+  async getInventoryTransactionsByItem(itemId: string) {
+    return this.prisma.inventoryTransaction.findMany({
+      where: { inventoryItemId: itemId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        inventoryItem: true,
+        warehouseItem: {
+          include: {
+            warehouse: true,
+          },
+        },
+        warehouse: true,
+        targetWarehouse: true,
+        user: true,
+      },
+    });
+  }
+
+  async getWarehouseTransactions(warehouseId: string, filters: {
+    startDate?: Date;
+    endDate?: Date;
+    type?: InventoryTransactionType;
+    includeTransfers?: boolean;
+  } = {}) {
+    const where: Prisma.InventoryTransactionWhereInput = {
+      OR: [
+        { warehouseId },
+        ...(filters.includeTransfers ? [{ targetWarehouseId: warehouseId }] : [])
+      ]
+    };
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = filters.startDate;
+      if (filters.endDate) where.createdAt.lte = filters.endDate;
     }
 
-    if (data.type !== 'TRANSFER') {
-      await prisma.warehouseItem.update({
-        where: { id: warehouseItem.id },
-        data: updateData
-      });
-    } else if (data.targetWarehouseId && targetWarehouseItem) {
-      // Для трансферов обновляем оба склада
-      await prisma.warehouseItem.update({
-        where: { id: warehouseItem.id },
-        data: updateData
-      });
-
-      // Рассчитываем стоимость для целевого склада
-      const targetUpdateData: any = {
-        quantity: targetWarehouseItem.quantity + data.quantity
-      };
-
-      if (warehouseItem.cost) {
-        const currentTargetTotalCost = targetWarehouseItem.quantity * (targetWarehouseItem.cost || 0);
-        const transferTotalCost = data.quantity * warehouseItem.cost;
-        const newTargetTotalCost = currentTargetTotalCost + transferTotalCost;
-        const newTargetCost = newTargetTotalCost / (targetWarehouseItem.quantity + data.quantity);
-        targetUpdateData.cost = newTargetCost;
-      }
-
-      await prisma.warehouseItem.update({
-        where: { id: targetWarehouseItem.id },
-        data: targetUpdateData
-      });
+    if (filters.type) {
+      where.type = filters.type;
     }
 
-    return transaction;
-  });
-}
-
-
-
-async getInventoryTransactionById(id: string) {
-  return this.prisma.inventoryTransaction.findUnique({
-    where: { id },
-    include: {
-      inventoryItem: true,
-      warehouseItem: {
-        include: {
-          warehouse: true,
-          storageLocation: true,
+    return this.prisma.inventoryTransaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        inventoryItem: true,
+        warehouseItem: {
+          include: {
+            storageLocation: true,
+          },
         },
+        warehouse: true,
+        targetWarehouse: true,
+        user: true,
       },
-      warehouse: true,
-      targetWarehouse: true,
-      user: true,
-    },
-  });
-}
+    });
+  }
 
-async getInventoryTransactionsByItem(itemId: string) {
-  return this.prisma.inventoryTransaction.findMany({
-    where: { inventoryItemId: itemId },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      inventoryItem: true,
-      warehouseItem: {
-        include: {
-          warehouse: true,
-        },
+  // Новый метод для получения трансферов между складами
+  async getTransferTransactions(warehouseId: string, filters: {
+    startDate?: Date;
+    endDate?: Date;
+    direction?: 'incoming' | 'outgoing' | 'both';
+  } = {}) {
+    const where: Prisma.InventoryTransactionWhereInput = {
+      type: 'TRANSFER'
+    };
+
+    if (filters.direction === 'incoming' || filters.direction === 'both') {
+      where.OR = [
+        ...(where.OR || []),
+        { targetWarehouseId: warehouseId }
+      ];
+    }
+
+    if (filters.direction === 'outgoing' || filters.direction === 'both') {
+      where.OR = [
+        ...(where.OR || []),
+        { warehouseId }
+      ];
+    }
+
+    if (filters.startDate || filters.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = filters.startDate;
+      if (filters.endDate) where.createdAt.lte = filters.endDate;
+    }
+
+    return this.prisma.inventoryTransaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        inventoryItem: true,
+        warehouseItem: true,
+        warehouse: true,
+        targetWarehouse: true,
+        user: true,
       },
-      warehouse: true,
-      targetWarehouse: true,
-      user: true,
-    },
-  });
-}
-
-async getWarehouseTransactions(warehouseId: string, filters: {
-  startDate?: Date;
-  endDate?: Date;
-  type?: InventoryTransactionType;
-  includeTransfers?: boolean;
-} = {}) {
-  const where: Prisma.InventoryTransactionWhereInput = {
-    OR: [
-      { warehouseId },
-      ...(filters.includeTransfers ? [{ targetWarehouseId: warehouseId }] : [])
-    ]
-  };
-
-  if (filters.startDate || filters.endDate) {
-    where.createdAt = {};
-    if (filters.startDate) where.createdAt.gte = filters.startDate;
-    if (filters.endDate) where.createdAt.lte = filters.endDate;
+    });
   }
-
-  if (filters.type) {
-    where.type = filters.type;
-  }
-
-  return this.prisma.inventoryTransaction.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      inventoryItem: true,
-      warehouseItem: {
-        include: {
-          storageLocation: true,
-        },
-      },
-      warehouse: true,
-      targetWarehouse: true,
-      user: true,
-    },
-  });
-}
-
-// Новый метод для получения трансферов между складами
-async getTransferTransactions(warehouseId: string, filters: {
-  startDate?: Date;
-  endDate?: Date;
-  direction?: 'incoming' | 'outgoing' | 'both';
-} = {}) {
-  const where: Prisma.InventoryTransactionWhereInput = {
-    type: 'TRANSFER'
-  };
-
-  if (filters.direction === 'incoming' || filters.direction === 'both') {
-    where.OR = [
-      ...(where.OR || []),
-      { targetWarehouseId: warehouseId }
-    ];
-  }
-
-  if (filters.direction === 'outgoing' || filters.direction === 'both') {
-    where.OR = [
-      ...(where.OR || []),
-      { warehouseId }
-    ];
-  }
-
-  if (filters.startDate || filters.endDate) {
-    where.createdAt = {};
-    if (filters.startDate) where.createdAt.gte = filters.startDate;
-    if (filters.endDate) where.createdAt.lte = filters.endDate;
-  }
-
-  return this.prisma.inventoryTransaction.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      inventoryItem: true,
-      warehouseItem: true,
-      warehouse: true,
-      targetWarehouse: true,
-      user: true,
-    },
-  });
-}
 
   // ==================== Premix Methods ====================
 
-  async createPremix(data: Prisma.PremixCreateInput) {
-    return this.prisma.$transaction(async (prisma) => {
-      // Create inventory item first
-      const inventoryItem = await prisma.inventoryItem.create({
-        data: {
-          name: data.name as string,
-          description: data.description as string,
-          unit: data.unit as string,
-          isActive: true,
-          premix: {
-            connect: { id: (data as any).id }, 
-          },
-        },
-      });
-
-      // Then create premix with ingredients
-      const premix = await prisma.premix.create({
-        data: {
-          ...data,
-          inventoryItem: {
-            connect: { id: inventoryItem.id },
-          },
-        },
-        include: {
-          ingredients: {
-            include: {
-              inventoryItem: true,
-            },
-          },
-          inventoryItem: true,
-        },
-      });
-
-      return premix;
-    });
-  }
 
   async getPremixById(id: string) {
     return this.prisma.premix.findUnique({
@@ -891,73 +887,392 @@ async getTransferTransactions(warehouseId: string, filters: {
     });
   }
 
+
+  async bulkAssignNetworkToItems(data: BulkAssignNetworkDto) {
+    const { networkId, inventoryItemIds, replaceExisting = false } = data;
+
+    // Проверяем существование сети
+    const network = await this.prisma.network.findUnique({
+      where: { id: networkId }
+    });
+
+    if (!network) {
+      throw new Error(`Network with ID ${networkId} not found`);
+    }
+
+    // 1. Получаем существующие инвентарные позиции
+    const existingItems = await this.prisma.inventoryItem.findMany({
+      where: {
+        id: { in: inventoryItemIds }
+      },
+      select: {
+        id: true,
+        name: true,
+        networkId: true
+      }
+    });
+
+    const itemsMap = new Map(existingItems.map(item => [item.id, item]));
+
+    // 2. Фильтруем элементы для обновления
+    const itemsToUpdate = existingItems.filter(item => {
+      if (replaceExisting) return true; // Обновляем все, если replaceExisting = true
+      return !item.networkId; // Обновляем только те, у кого нет сети
+    });
+
+    if (itemsToUpdate.length === 0) {
+      return {
+        success: true,
+        message: 'No items to update',
+        total: inventoryItemIds.length,
+        processed: 0,
+        updated: 0,
+        skipped: inventoryItemIds.length,
+        errors: 0,
+        details: inventoryItemIds.map(itemId => ({
+          inventoryItemId: itemId,
+          inventoryItemName: itemsMap.get(itemId)?.name,
+          status: 'skipped' as const,
+          message: itemsMap.get(itemId)?.networkId
+            ? 'Item already has a network assigned'
+            : 'Item not found'
+        }))
+      };
+    }
+
+    // 3. Проверяем уникальность имен
+    const namesToUpdate = [...new Set(itemsToUpdate.map(item => item.name))];
+    const existingNamesInNetwork = await this.prisma.inventoryItem.findMany({
+      where: {
+        name: { in: namesToUpdate },
+        networkId: networkId,
+        id: { notIn: itemsToUpdate.map(item => item.id) }
+      },
+      select: {
+        name: true
+      }
+    });
+
+    const duplicateNames = new Set(existingNamesInNetwork.map(item => item.name));
+
+    // 4. Разделяем элементы: те, что можно обновить и те, что имеют дубликаты
+    const validItemsToUpdate = itemsToUpdate.filter(item => !duplicateNames.has(item.name));
+    const duplicateItems = itemsToUpdate.filter(item => duplicateNames.has(item.name));
+
+    const results = {
+      total: inventoryItemIds.length,
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      details: [] as Array<{
+        inventoryItemId: string;
+        inventoryItemName?: string;
+        status: 'updated' | 'skipped' | 'error';
+        message?: string;
+      }>
+    };
+
+    // 5. Массовое обновление
+    if (validItemsToUpdate.length > 0) {
+      try {
+        await this.prisma.inventoryItem.updateMany({
+          where: {
+            id: { in: validItemsToUpdate.map(item => item.id) }
+          },
+          data: {
+            networkId: networkId
+          }
+        });
+
+        // Добавляем успешные обновления
+        validItemsToUpdate.forEach(item => {
+          results.updated++;
+          results.details.push({
+            inventoryItemId: item.id,
+            inventoryItemName: item.name,
+            status: 'updated',
+            message: 'Successfully assigned to network'
+          });
+        });
+      } catch (error) {
+        // В случае ошибки - помечаем все как ошибки
+        validItemsToUpdate.forEach(item => {
+          results.errors++;
+          results.details.push({
+            inventoryItemId: item.id,
+            inventoryItemName: item.name,
+            status: 'error',
+            message: error.message || 'Bulk update failed'
+          });
+        });
+      }
+    }
+
+    // 6. Обрабатываем дубликаты
+    duplicateItems.forEach(item => {
+      results.errors++;
+      results.details.push({
+        inventoryItemId: item.id,
+        inventoryItemName: item.name,
+        status: 'error',
+        message: `Item with name "${item.name}" already exists in the target network`
+      });
+    });
+
+    // 7. Обрабатываем элементы, которые были пропущены
+    const processedIds = new Set(existingItems.map(item => item.id));
+    const notFoundItems = inventoryItemIds.filter(id => !processedIds.has(id));
+
+    notFoundItems.forEach(itemId => {
+      results.errors++;
+      results.details.push({
+        inventoryItemId: itemId,
+        status: 'error',
+        message: 'Item not found'
+      });
+    });
+
+    // 8. Обрабатываем элементы, которые были пропущены из-за наличия сети
+    if (!replaceExisting) {
+      const skippedItems = existingItems.filter(item =>
+        item.networkId &&
+        !duplicateNames.has(item.name) &&
+        !validItemsToUpdate.some(v => v.id === item.id)
+      );
+
+      skippedItems.forEach(item => {
+        results.skipped++;
+        results.details.push({
+          inventoryItemId: item.id,
+          inventoryItemName: item.name,
+          status: 'skipped',
+          message: 'Item already has a network assigned'
+        });
+      });
+    }
+
+    results.processed = results.updated + results.skipped + results.errors;
+
+    return {
+      success: results.errors === 0,
+      message: `Processed ${results.processed} items. Updated: ${results.updated}, Skipped: ${results.skipped}, Errors: ${results.errors}`,
+      ...results
+    };
+  }
+
+  private async processBatch(networkId: string, itemIds: string[], replaceExisting: boolean) {
+    return this.prisma.$transaction(async (prisma) => {
+      const results = {
+        processed: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        details: [] as Array<{
+          inventoryItemId: string;
+          inventoryItemName?: string;
+          status: 'updated' | 'skipped' | 'error';
+          message?: string;
+        }>
+      };
+
+      // Получаем существующие инвентарные позиции для батча
+      const existingItems = await prisma.inventoryItem.findMany({
+        where: {
+          id: { in: itemIds }
+        },
+        select: {
+          id: true,
+          name: true,
+          networkId: true
+        }
+      });
+
+      const itemsMap = new Map(existingItems.map(item => [item.id, item]));
+
+      for (const itemId of itemIds) {
+        try {
+          const existingItem = itemsMap.get(itemId);
+
+          if (!existingItem) {
+            results.errors++;
+            results.details.push({
+              inventoryItemId: itemId,
+              status: 'error',
+              message: 'Item not found'
+            });
+            continue;
+          }
+
+          // Проверяем, нужно ли обновлять сеть
+          if (!replaceExisting && existingItem.networkId) {
+            results.skipped++;
+            results.details.push({
+              inventoryItemId: itemId,
+              inventoryItemName: existingItem.name,
+              status: 'skipped',
+              message: 'Item already has a network assigned'
+            });
+            continue;
+          }
+
+          // Проверяем уникальность имени в новой сети
+          if (networkId !== existingItem.networkId) {
+            const duplicateName = await prisma.inventoryItem.findFirst({
+              where: {
+                name: existingItem.name,
+                networkId: networkId,
+                id: { not: itemId }
+              }
+            });
+
+            if (duplicateName) {
+              results.errors++;
+              results.details.push({
+                inventoryItemId: itemId,
+                inventoryItemName: existingItem.name,
+                status: 'error',
+                message: `Item with name "${existingItem.name}" already exists in the target network`
+              });
+              continue;
+            }
+          }
+
+          // Обновляем инвентарную позицию
+          await prisma.inventoryItem.update({
+            where: { id: itemId },
+            data: {
+              network: { connect: { id: networkId } }
+            }
+          });
+
+          results.updated++;
+          results.details.push({
+            inventoryItemId: itemId,
+            inventoryItemName: existingItem.name,
+            status: 'updated',
+            message: 'Successfully assigned to network'
+          });
+
+        } catch (error) {
+          results.errors++;
+          results.details.push({
+            inventoryItemId: itemId,
+            status: 'error',
+            message: error.message || 'Unknown error'
+          });
+        }
+
+        results.processed++;
+      }
+
+      return results;
+    }, {
+      maxWait: 15000,
+      timeout: 15000,
+    });
+  }
+
   async preparePremix(premixId: string, quantity: number, userId?: string) {
-  return this.prisma.$transaction(async (prisma) => {
-    const premix = await prisma.premix.findUnique({
-      where: { id: premixId },
-      include: {
-        ingredients: {
-          include: {
-            inventoryItem: {
-              include: {
-                warehouseItems: true,
+    return this.prisma.$transaction(async (prisma) => {
+      const premix = await prisma.premix.findUnique({
+        where: { id: premixId },
+        include: {
+          ingredients: {
+            include: {
+              inventoryItem: {
+                include: {
+                  warehouseItems: true,
+                },
               },
             },
           },
-        },
-        inventoryItem: {
-          include: {
-            warehouseItems: true 
+          inventoryItem: {
+            include: {
+              warehouseItems: true
+            }
           }
-        }
-      },
-    });
-
-    if (!premix) {
-      throw new Error('Premix not found');
-    }
-
-    // УБИРАЕМ ПРОВЕРКУ ДОСТУПНОСТИ ИНГРЕДИЕНТОВ
-    // Теперь позволяем списывать даже если недостаточно ингредиентов
-
-    // Deduct ingredients (даже если уходим в минус)
-    for (const ingredient of premix.ingredients) {
-      const required = ingredient.quantity * quantity;
-      
-      // Находим все warehouse items для этого ингредиента
-      const warehouseItems = await prisma.warehouseItem.findMany({
-        where: {
-          inventoryItemId: ingredient.inventoryItem.id,
         },
-        orderBy: { createdAt: 'asc' },
       });
 
-      let remaining = required;
+      if (!premix) {
+        throw new Error('Premix not found');
+      }
 
-      // Сначала списываем из доступных позиций
-      for (const warehouseItem of warehouseItems) {
-        if (remaining <= 0) break;
+      // УБИРАЕМ ПРОВЕРКУ ДОСТУПНОСТИ ИНГРЕДИЕНТОВ
+      // Теперь позволяем списывать даже если недостаточно ингредиентов
 
-        const available = warehouseItem.quantity;
-        const deduct = Math.min(remaining, available);
-        remaining -= deduct;
+      // Deduct ingredients (даже если уходим в минус)
+      for (const ingredient of premix.ingredients) {
+        const required = ingredient.quantity * quantity;
 
-        if (deduct > 0) {
+        // Находим все warehouse items для этого ингредиента
+        const warehouseItems = await prisma.warehouseItem.findMany({
+          where: {
+            inventoryItemId: ingredient.inventoryItem.id,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        let remaining = required;
+
+        // Сначала списываем из доступных позиций
+        for (const warehouseItem of warehouseItems) {
+          if (remaining <= 0) break;
+
+          const available = warehouseItem.quantity;
+          const deduct = Math.min(remaining, available);
+          remaining -= deduct;
+
+          if (deduct > 0) {
+            await prisma.warehouseItem.update({
+              where: { id: warehouseItem.id },
+              data: { quantity: { decrement: deduct } },
+            });
+
+            await prisma.inventoryTransaction.create({
+              data: {
+                type: 'WRITE_OFF',
+                quantity: deduct,
+                previousQuantity: warehouseItem.quantity,
+                newQuantity: warehouseItem.quantity - deduct,
+                reason: `Premix preparation: ${premix.name}`,
+                inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
+                warehouseItem: { connect: { id: warehouseItem.id } },
+                warehouse: { connect: { id: warehouseItem.warehouseId } },
+                user: userId ? { connect: { id: userId } } : undefined,
+                documentId: premixId,
+              },
+            });
+          }
+        }
+
+        // Если осталось списать - создаем отрицательный баланс
+        if (remaining > 0) {
+          // Находим основной склад или создаем запись с отрицательным количеством
+          const mainWarehouseItem = warehouseItems[0] || await prisma.warehouseItem.create({
+            data: {
+              warehouse: { connect: { id: warehouseItems[0]?.warehouseId || (await prisma.warehouse.findFirst({ where: { isActive: true } }))?.id! } },
+              inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
+              quantity: -remaining
+            }
+          });
+
           await prisma.warehouseItem.update({
-            where: { id: warehouseItem.id },
-            data: { quantity: { decrement: deduct } },
+            where: { id: mainWarehouseItem.id },
+            data: { quantity: { decrement: remaining } },
           });
 
           await prisma.inventoryTransaction.create({
             data: {
               type: 'WRITE_OFF',
-              quantity: deduct,
-              previousQuantity: warehouseItem.quantity,
-              newQuantity: warehouseItem.quantity - deduct,
-              reason: `Premix preparation: ${premix.name}`,
+              quantity: remaining,
+              previousQuantity: mainWarehouseItem.quantity,
+              newQuantity: mainWarehouseItem.quantity - remaining,
+              reason: `Premix preparation (negative balance): ${premix.name}`,
               inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
-              warehouseItem: { connect: { id: warehouseItem.id } },
-              warehouse: { connect: { id: warehouseItem.warehouseId } },
+              warehouseItem: { connect: { id: mainWarehouseItem.id } },
+              warehouse: { connect: { id: mainWarehouseItem.warehouseId } },
               user: userId ? { connect: { id: userId } } : undefined,
               documentId: premixId,
             },
@@ -965,81 +1280,48 @@ async getTransferTransactions(warehouseId: string, filters: {
         }
       }
 
-      // Если осталось списать - создаем отрицательный баланс
-      if (remaining > 0) {
-        // Находим основной склад или создаем запись с отрицательным количеством
-        const mainWarehouseItem = warehouseItems[0] || await prisma.warehouseItem.create({
+      const resultingQuantity = quantity * (premix.yield || 1);
+      let warehouseItem = premix.inventoryItem?.warehouseItems[0];
+
+      // Если нет warehouse item - создаем его
+      if (!warehouseItem) {
+        const warehouse = await prisma.warehouse.findFirst({ where: { isActive: true } });
+        if (!warehouse) {
+          throw new Error('No active warehouse found');
+        }
+
+        warehouseItem = await prisma.warehouseItem.create({
           data: {
-            warehouse: { connect: { id: warehouseItems[0]?.warehouseId || (await prisma.warehouse.findFirst({ where: { isActive: true } }))?.id! } },
-            inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
-            quantity: -remaining
+            warehouse: { connect: { id: warehouse.id } },
+            inventoryItem: { connect: { id: premix.inventoryItem!.id } },
+            quantity: 0
           }
         });
-
-        await prisma.warehouseItem.update({
-          where: { id: mainWarehouseItem.id },
-          data: { quantity: { decrement: remaining } },
-        });
-
-        await prisma.inventoryTransaction.create({
-          data: {
-            type: 'WRITE_OFF',
-            quantity: remaining,
-            previousQuantity: mainWarehouseItem.quantity,
-            newQuantity: mainWarehouseItem.quantity - remaining,
-            reason: `Premix preparation (negative balance): ${premix.name}`,
-            inventoryItem: { connect: { id: ingredient.inventoryItem.id } },
-            warehouseItem: { connect: { id: mainWarehouseItem.id } },
-            warehouse: { connect: { id: mainWarehouseItem.warehouseId } },
-            user: userId ? { connect: { id: userId } } : undefined,
-            documentId: premixId,
-          },
-        });
-      }
-    }
-
-    const resultingQuantity = quantity * (premix.yield || 1);
-    let warehouseItem = premix.inventoryItem?.warehouseItems[0];
-
-    // Если нет warehouse item - создаем его
-    if (!warehouseItem) {
-      const warehouse = await prisma.warehouse.findFirst({ where: { isActive: true } });
-      if (!warehouse) {
-        throw new Error('No active warehouse found');
       }
 
-      warehouseItem = await prisma.warehouseItem.create({
-        data: {
-          warehouse: { connect: { id: warehouse.id } },
-          inventoryItem: { connect: { id: premix.inventoryItem!.id } },
-          quantity: 0
-        }
+      const updatedItem = await prisma.warehouseItem.update({
+        where: { id: warehouseItem.id },
+        data: { quantity: { increment: resultingQuantity } },
       });
-    }
 
-    const updatedItem = await prisma.warehouseItem.update({
-      where: { id: warehouseItem.id },
-      data: { quantity: { increment: resultingQuantity } },
+      await prisma.inventoryTransaction.create({
+        data: {
+          type: 'RECEIPT',
+          quantity: resultingQuantity,
+          previousQuantity: warehouseItem.quantity,
+          newQuantity: warehouseItem.quantity + resultingQuantity,
+          reason: `Premix preparation: ${premix.name}`,
+          inventoryItem: { connect: { id: premix.inventoryItem!.id } },
+          warehouseItem: { connect: { id: warehouseItem.id } },
+          warehouse: { connect: { id: warehouseItem.warehouseId } },
+          user: userId ? { connect: { id: userId } } : undefined,
+          documentId: premixId,
+        },
+      });
+
+      return updatedItem;
     });
-
-    await prisma.inventoryTransaction.create({
-      data: {
-        type: 'RECEIPT',
-        quantity: resultingQuantity,
-        previousQuantity: warehouseItem.quantity,
-        newQuantity: warehouseItem.quantity + resultingQuantity,
-        reason: `Premix preparation: ${premix.name}`,
-        inventoryItem: { connect: { id: premix.inventoryItem!.id } },
-        warehouseItem: { connect: { id: warehouseItem.id } },
-        warehouse: { connect: { id: warehouseItem.warehouseId } },
-        user: userId ? { connect: { id: userId } } : undefined,
-        documentId: premixId,
-      },
-    });
-
-    return updatedItem;
-  });
-}
+  }
 
   // ==================== Premix Ingredient Methods ====================
 
@@ -1111,128 +1393,128 @@ async getTransferTransactions(warehouseId: string, filters: {
     });
   }
 
-async checkProductIngredientsAvailability(productId: string, quantity: number) {
-  const product = await this.prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      ingredients: {
-        include: {
-          inventoryItem: {
-            include: {
-              warehouseItems: true,
+  async checkProductIngredientsAvailability(productId: string, quantity: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                warehouseItems: true,
+              },
             },
           },
         },
       },
-    },
-  });
-
-  if (!product) {
-    throw new Error('Product not found');
-  }
-
-  const availability = [];
-  let allAvailable = true;
-
-  for (const ingredient of product.ingredients) {
-    const totalAvailable = ingredient.inventoryItem.warehouseItems.reduce(
-      (sum, wi) => sum + wi.quantity, // Убираем вычитание reserved
-      0,
-    );
-
-    const required = ingredient.quantity * quantity;
-    
-    // Теперь просто показываем доступное количество, без проверки isAvailable
-    availability.push({
-      ingredientId: ingredient.inventoryItem.id,
-      ingredientName: ingredient.inventoryItem.name,
-      required,
-      available: totalAvailable,
-      // Всегда доступно, даже если отрицательное
     });
-  }
 
-  return {
-    productId,
-    productName: product.title,
-    quantity,
-    allAvailable: true, // Всегда true, так как разрешаем отрицательные значения
-    ingredients: availability,
-  };
-}
+    if (!product) {
+      throw new Error('Product not found');
+    }
 
-async getWarehouseItemsWithDetails(warehouseId: string, filters: {
-  search?: string;
-  lowStock?: boolean;
-  storageLocationId?: string;
-} = {}) {
-  const where: Prisma.WarehouseItemWhereInput = {
-    warehouseId,
-  };
+    const availability = [];
+    let allAvailable = true;
 
-  // Фильтр по местоположению
-  if (filters.storageLocationId) {
-    where.storageLocationId = filters.storageLocationId;
-  }
+    for (const ingredient of product.ingredients) {
+      const totalAvailable = ingredient.inventoryItem.warehouseItems.reduce(
+        (sum, wi) => sum + wi.quantity, // Убираем вычитание reserved
+        0,
+      );
 
-  // Поиск по названию товара
-  if (filters.search) {
-    where.inventoryItem = {
-      name: {
-        contains: filters.search,
-        mode: 'insensitive',
-      },
+      const required = ingredient.quantity * quantity;
+
+      // Теперь просто показываем доступное количество, без проверки isAvailable
+      availability.push({
+        ingredientId: ingredient.inventoryItem.id,
+        ingredientName: ingredient.inventoryItem.name,
+        required,
+        available: totalAvailable,
+        // Всегда доступно, даже если отрицательное
+      });
+    }
+
+    return {
+      productId,
+      productName: product.title,
+      quantity,
+      allAvailable: true, // Всегда true, так как разрешаем отрицательные значения
+      ingredients: availability,
     };
   }
 
-  return this.prisma.warehouseItem.findMany({
-    where,
-    include: {
-      inventoryItem: {
-        include: {
-          product: true,
-          premix: true,
-          ingredients: {
-            include: {
-              product: true,
+  async getWarehouseItemsWithDetails(warehouseId: string, filters: {
+    search?: string;
+    lowStock?: boolean;
+    storageLocationId?: string;
+  } = {}) {
+    const where: Prisma.WarehouseItemWhereInput = {
+      warehouseId,
+    };
+
+    // Фильтр по местоположению
+    if (filters.storageLocationId) {
+      where.storageLocationId = filters.storageLocationId;
+    }
+
+    // Поиск по названию товара
+    if (filters.search) {
+      where.inventoryItem = {
+        name: {
+          contains: filters.search,
+          mode: 'insensitive',
+        },
+      };
+    }
+
+    return this.prisma.warehouseItem.findMany({
+      where,
+      include: {
+        inventoryItem: {
+          include: {
+            product: true,
+            premix: true,
+            ingredients: {
+              include: {
+                product: true,
+              },
             },
-          },
-          premixIgredients: {
-            include: {
-              premix: true,
+            premixIgredients: {
+              include: {
+                premix: true,
+              },
             },
           },
         },
+        warehouse: true,
+        storageLocation: true,
       },
-      warehouse: true,
-      storageLocation: true,
-    },
-    orderBy: {
-      inventoryItem: {
-        name: 'asc',
+      orderBy: {
+        inventoryItem: {
+          name: 'asc',
+        },
       },
-    },
-  });
-}
+    });
+  }
   async getItemsNotInWarehouse(warehouseId: string) {
-  return this.prisma.inventoryItem.findMany({
-    where: {
-      isActive: true,
-      warehouseItems: {
-        none: {
-          warehouseId: warehouseId
+    return this.prisma.inventoryItem.findMany({
+      where: {
+        isActive: true,
+        warehouseItems: {
+          none: {
+            warehouseId: warehouseId
+          }
         }
-      }
-    },
-    include: {
-      product: true,
-      premix: true
-    },
-    orderBy: { name: 'asc' }
-  });
-}
+      },
+      include: {
+        product: true,
+        premix: true
+      },
+      orderBy: { name: 'asc' }
+    });
+  }
 
-// ==================== Storage Location List Method ====================
+  // ==================== Storage Location List Method ====================
   async listStorageLocations(warehouseId: string, filters: {
     search?: string;
   } = {}) {
@@ -1263,7 +1545,7 @@ async getWarehouseItemsWithDetails(warehouseId: string, filters: {
     });
   }
 
-// ==================== Premix List Method ====================
+  // ==================== Premix List Method ====================
   async listPremixes(filters: {
     search?: string;
   } = {}) {
@@ -1293,304 +1575,597 @@ async getWarehouseItemsWithDetails(warehouseId: string, filters: {
   }
 
   async getPremixesWithWarehouseItems(warehouseId: string, filters: {
-  search?: string;
-} = {}) {
-  const where: Prisma.PremixWhereInput = {};
+    search?: string;
+  } = {}) {
+    const where: Prisma.PremixWhereInput = {};
 
-  if (filters.search) {
-    where.name = {
-      contains: filters.search,
-      mode: 'insensitive',
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
+      };
+    }
+
+    return this.prisma.premix.findMany({
+      where,
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                warehouseItems: {
+                  where: {
+                    warehouseId: warehouseId
+                  },
+                  include: {
+                    warehouse: true,
+                    storageLocation: true,
+                  }
+                }
+              }
+            },
+          },
+        },
+        inventoryItem: {
+          include: {
+            warehouseItems: {
+              where: {
+                warehouseId: warehouseId
+              },
+              include: {
+                warehouse: true,
+                storageLocation: true,
+              }
+            }
+          }
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+  async getPremixWithWarehouseInfo(premixId: string, warehouseId: string) {
+    const premix = await this.prisma.premix.findUnique({
+      where: { id: premixId },
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                warehouseItems: {
+                  where: {
+                    warehouseId: warehouseId
+                  },
+                  include: {
+                    warehouse: true,
+                    storageLocation: true,
+                  }
+                }
+              }
+            },
+          },
+        },
+        inventoryItem: {
+          include: {
+            warehouseItems: {
+              where: {
+                warehouseId: warehouseId
+              },
+              include: {
+                warehouse: true,
+                storageLocation: true,
+              }
+            }
+          }
+        },
+      },
+    });
+
+    if (!premix) {
+      throw new Error('Premix not found');
+    }
+
+    return {
+      ...premix,
+      warehouseItem: premix.inventoryItem?.warehouseItems[0] || null,
+      availableQuantity: premix.inventoryItem?.warehouseItems[0]
+        ? premix.inventoryItem.warehouseItems[0].quantity - premix.inventoryItem.warehouseItems[0].reserved
+        : 0
     };
   }
-
-  return this.prisma.premix.findMany({
-    where,
-    include: {
-      ingredients: {
-        include: {
-          inventoryItem: {
-            include: {
-              warehouseItems: {
-                where: {
-                  warehouseId: warehouseId
-                },
-                include: {
-                  warehouse: true,
-                  storageLocation: true,
+  async getPremixWithWarehouseDetails(premixId: string, warehouseId: string) {
+    return this.prisma.premix.findUnique({
+      where: { id: premixId },
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: {
+              include: {
+                warehouseItems: {
+                  where: {
+                    warehouseId: warehouseId
+                  },
+                  include: {
+                    warehouse: true,
+                    storageLocation: true,
+                  }
                 }
               }
-            }
+            },
           },
         },
-      },
-      inventoryItem: {
-        include: {
-          warehouseItems: {
-            where: {
-              warehouseId: warehouseId
-            },
-            include: {
-              warehouse: true,
-              storageLocation: true,
-            }
-          }
-        }
-      },
-    },
-    orderBy: { name: 'asc' },
-  });
-}
-async getPremixWithWarehouseInfo(premixId: string, warehouseId: string) {
-  const premix = await this.prisma.premix.findUnique({
-    where: { id: premixId },
-    include: {
-      ingredients: {
-        include: {
-          inventoryItem: {
-            include: {
-              warehouseItems: {
-                where: {
-                  warehouseId: warehouseId
-                },
-                include: {
-                  warehouse: true,
-                  storageLocation: true,
-                }
+        inventoryItem: {
+          include: {
+            warehouseItems: {
+              where: {
+                warehouseId: warehouseId
+              },
+              include: {
+                warehouse: true,
+                storageLocation: true,
               }
             }
-          },
+          }
         },
       },
-      inventoryItem: {
-        include: {
-          warehouseItems: {
-            where: {
-              warehouseId: warehouseId
-            },
-            include: {
-              warehouse: true,
-              storageLocation: true,
-            }
-          }
-        }
-      },
-    },
-  });
-
-  if (!premix) {
-    throw new Error('Premix not found');
+    });
   }
 
-  return {
-    ...premix,
-    warehouseItem: premix.inventoryItem?.warehouseItems[0] || null,
-    availableQuantity: premix.inventoryItem?.warehouseItems[0] 
-      ? premix.inventoryItem.warehouseItems[0].quantity - premix.inventoryItem.warehouseItems[0].reserved 
-      : 0
-  };
-}
-async getPremixWithWarehouseDetails(premixId: string, warehouseId: string) {
-  return this.prisma.premix.findUnique({
-    where: { id: premixId },
-    include: {
-      ingredients: {
-        include: {
-          inventoryItem: {
-            include: {
-              warehouseItems: {
-                where: {
-                  warehouseId: warehouseId
-                },
-                include: {
-                  warehouse: true,
-                  storageLocation: true,
-                }
-              }
-            }
+
+  async getInventoryCategoryById(id: string) {
+    return this.prisma.inventoryCategory.findUnique({
+      where: { id },
+      include: {
+        parent: true,
+        children: true,
+        inventoryItems: {
+          include: {
+            product: true,
+            premix: true,
+            warehouseItems: true,
           },
         },
       },
-      inventoryItem: {
-        include: {
-          warehouseItems: {
-            where: {
-              warehouseId: warehouseId
-            },
-            include: {
-              warehouse: true,
-              storageLocation: true,
-            }
-          }
-        }
-      },
-    },
-  });
-}
+    });
+  }
 
-async createInventoryCategory(data: Prisma.InventoryCategoryCreateInput) {
-  return this.prisma.inventoryCategory.create({
-    data,
-    include: {
-      parent: true,
-      children: true,
-      inventoryItems: true,
-    },
-  });
-}
+  async getAllInventoryCategories(filters: {
+    search?: string;
+    includeInactive?: boolean;
+    parentId?: string | null;
+  } = {}) {
+    const where: Prisma.InventoryCategoryWhereInput = {};
 
-async getInventoryCategoryById(id: string) {
-  return this.prisma.inventoryCategory.findUnique({
-    where: { id },
-    include: {
-      parent: true,
-      children: true,
-      inventoryItems: {
-        include: {
-          product: true,
-          premix: true,
-          warehouseItems: true,
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
+      };
+    }
+
+    if (!filters.includeInactive) {
+      where.isActive = true;
+    }
+
+    if (filters.parentId !== undefined) {
+      where.parentId = filters.parentId;
+    }
+    return this.prisma.inventoryCategory.findMany({
+      where,
+      include: {
+        parent: true,
+        children: true,
+        inventoryItems: {
+          include: {
+            product: true,
+            premix: true,
+          },
         },
       },
-    },
-  });
-}
+      orderBy: { name: 'asc' },
+    });
+  }
 
-async getAllInventoryCategories(filters: {
-  search?: string;
-  includeInactive?: boolean;
-  parentId?: string | null;
-} = {}) {
-  const where: Prisma.InventoryCategoryWhereInput = {};
+  async updateInventoryCategory(id: string, data: Prisma.InventoryCategoryUpdateInput) {
+    return this.prisma.inventoryCategory.update({
+      where: { id },
+      data,
+      include: {
+        parent: true,
+        children: true,
+        inventoryItems: true,
+      },
+    });
+  }
 
-  if (filters.search) {
-    where.name = {
-      contains: filters.search,
-      mode: 'insensitive',
+  async deleteInventoryCategory(id: string) {
+    // Check if category has items
+    const itemsCount = await this.prisma.inventoryItem.count({
+      where: { categoryId: id },
+    });
+
+    if (itemsCount > 0) {
+      throw new Error('Cannot delete category with items');
+    }
+
+    // Check if category has children
+    const childrenCount = await this.prisma.inventoryCategory.count({
+      where: { parentId: id },
+    });
+
+    if (childrenCount > 0) {
+      throw new Error('Cannot delete category with subcategories');
+    }
+
+    return this.prisma.inventoryCategory.delete({
+      where: { id },
+    });
+  }
+
+  async getCategoryTree() {
+    const categories = await this.prisma.inventoryCategory.findMany({
+      where: { isActive: true },
+      include: {
+        children: {
+          include: {
+            children: true,
+          },
+        },
+        inventoryItems: {
+          include: {
+            warehouseItems: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return categories.filter(category => !category.parentId);
+  }
+  async getPremixTransactions(premixId: string, warehouseId: string) {
+    const premix = await this.prisma.premix.findUnique({
+      where: { id: premixId },
+      include: {
+        inventoryItem: true
+      }
+    });
+
+    if (!premix || !premix.inventoryItem) {
+      return [];
+    }
+
+    // Находим warehouseItem для этого премикса в данном складе
+    const warehouseItem = await this.prisma.warehouseItem.findFirst({
+      where: {
+        warehouseId: warehouseId,
+        inventoryItemId: premix.inventoryItem.id
+      }
+    });
+
+    if (!warehouseItem) {
+      return [];
+    }
+
+    // Получаем транзакции для этого warehouseItem
+    return this.prisma.inventoryTransaction.findMany({
+      where: {
+        warehouseItemId: warehouseItem.id
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        inventoryItem: true,
+        warehouseItem: {
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
+        },
+        warehouse: true,
+        targetWarehouse: true,
+        user: true,
+      },
+    });
+  }
+  async getInventoryItemsByNetwork(networkId: string, filters: {
+    search?: string;
+    includeInactive?: boolean;
+    categoryId?: string;
+    warehouseId?: string;
+  } = {}) {
+    const where: Prisma.InventoryItemWhereInput = {
+      networkId: networkId
     };
-  }
 
-  if (!filters.includeInactive) {
-    where.isActive = true;
-  }
-
-  if (filters.parentId !== undefined) {
-    where.parentId = filters.parentId;
-  }
-  return this.prisma.inventoryCategory.findMany({
-    where,
-    include: {
-      parent: true,
-      children: true,
-      inventoryItems: {
-        include: {
-          product: true,
-          premix: true,
-        },
-      },
-    },
-    orderBy: { name: 'asc' },
-  });
-}
-
-async updateInventoryCategory(id: string, data: Prisma.InventoryCategoryUpdateInput) {
-  return this.prisma.inventoryCategory.update({
-    where: { id },
-    data,
-    include: {
-      parent: true,
-      children: true,
-      inventoryItems: true,
-    },
-  });
-}
-
-async deleteInventoryCategory(id: string) {
-  // Check if category has items
-  const itemsCount = await this.prisma.inventoryItem.count({
-    where: { categoryId: id },
-  });
-
-  if (itemsCount > 0) {
-    throw new Error('Cannot delete category with items');
-  }
-
-  // Check if category has children
-  const childrenCount = await this.prisma.inventoryCategory.count({
-    where: { parentId: id },
-  });
-
-  if (childrenCount > 0) {
-    throw new Error('Cannot delete category with subcategories');
-  }
-
-  return this.prisma.inventoryCategory.delete({
-    where: { id },
-  });
-}
-
-async getCategoryTree() {
-  const categories = await this.prisma.inventoryCategory.findMany({
-    where: { isActive: true },
-    include: {
-      children: {
-        include: {
-          children: true,
-        },
-      },
-      inventoryItems: {
-        include: {
-          warehouseItems: true,
-        },
-      },
-    },
-    orderBy: { name: 'asc' },
-  });
-
-  return categories.filter(category => !category.parentId);
-}
-async getPremixTransactions(premixId: string, warehouseId: string) {
-  const premix = await this.prisma.premix.findUnique({
-    where: { id: premixId },
-    include: {
-      inventoryItem: true
+    if (!filters.includeInactive) {
+      where.isActive = true;
     }
-  });
 
-  if (!premix || !premix.inventoryItem) {
-    return [];
-  }
-
-  // Находим warehouseItem для этого премикса в данном складе
-  const warehouseItem = await this.prisma.warehouseItem.findFirst({
-    where: {
-      warehouseId: warehouseId,
-      inventoryItemId: premix.inventoryItem.id
+    if (filters.search) {
+      where.OR = [
+        {
+          name: {
+            contains: filters.search,
+            mode: 'insensitive'
+          }
+        },
+        {
+          description: {
+            contains: filters.search,
+            mode: 'insensitive'
+          }
+        }
+      ];
     }
-  });
 
-  if (!warehouseItem) {
-    return [];
-  }
+    if (filters.categoryId) {
+      where.categoryId = filters.categoryId;
+    }
 
-  // Получаем транзакции для этого warehouseItem
-  return this.prisma.inventoryTransaction.findMany({
-    where: {
-      warehouseItemId: warehouseItem.id
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      inventoryItem: true,
-      warehouseItem: {
-        include: {
-          warehouse: true,
-          storageLocation: true,
+    const items = await this.prisma.inventoryItem.findMany({
+      where,
+      include: {
+        category: true,
+        product: true,
+        premix: true,
+        network: true,
+        warehouseItems: {
+          where: filters.warehouseId ? {
+            warehouseId: filters.warehouseId
+          } : undefined,
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
         },
       },
-      warehouse: true,
-      targetWarehouse: true,
-      user: true,
-    },
-  });
-}
+      orderBy: { name: 'asc' },
+    });
+
+    return items;
+  }
+
+
+  async getInventoryItemsWithoutNetwork() {
+    console.log('test')
+    const where: Prisma.InventoryItemWhereInput = {
+      networkId: null
+    };
+
+    const items = this.prisma.inventoryItem.findMany({
+      where,
+      include: {
+        category: true,
+        product: true,
+        premix: true,
+        warehouseItems: {
+          include: {
+            warehouse: true,
+            storageLocation: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return items
+  }
+
+   async getStorageLocationsByNetwork(networkId: string, filters: {
+    search?: string;
+    warehouseId?: string;
+  } = {}) {
+    const where: Prisma.StorageLocationWhereInput = {
+      networkId: networkId,
+    };
+
+    if (filters.warehouseId) {
+      where.warehouseId = filters.warehouseId;
+    }
+
+    if (filters.search) {
+      where.OR = [
+        {
+          name: {
+            contains: filters.search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          code: {
+            contains: filters.search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+
+    return this.prisma.storageLocation.findMany({
+      where,
+      include: {
+        warehouse: true,
+        network: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getInventoryCategoriesByNetwork(networkId: string, filters: {
+    search?: string;
+    parentId?: string | null;
+  } = {}) {
+    const where: Prisma.InventoryCategoryWhereInput = {
+      networkId: networkId,
+      isActive: true,
+    };
+
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
+      };
+    }
+
+    if (filters.parentId !== undefined) {
+      where.parentId = filters.parentId;
+    }
+
+    return this.prisma.inventoryCategory.findMany({
+      where,
+      include: {
+        parent: true,
+        children: true,
+        inventoryItems: {
+          include: {
+            product: true,
+            premix: true,
+          },
+        },
+        network: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getCategoryTreeByNetwork(networkId: string) {
+    const categories = await this.prisma.inventoryCategory.findMany({
+      where: { 
+        networkId: networkId,
+        isActive: true 
+      },
+      include: {
+        children: {
+          include: {
+            children: true,
+          },
+        },
+        inventoryItems: {
+          include: {
+            warehouseItems: true,
+          },
+        },
+        network: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return categories.filter(category => !category.parentId);
+  }
+
+  async getPremixesByNetwork(networkId: string, filters: {
+    search?: string;
+  } = {}) {
+    const where: Prisma.PremixWhereInput = {
+      networkId: networkId,
+    };
+
+    if (filters.search) {
+      where.name = {
+        contains: filters.search,
+        mode: 'insensitive',
+      };
+    }
+
+    return this.prisma.premix.findMany({
+      where,
+      include: {
+        ingredients: {
+          include: {
+            inventoryItem: true,
+          },
+        },
+        inventoryItem: true,
+        network: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+
+
+  async createStorageLocation(data: Prisma.StorageLocationCreateInput & { networkId?: string }) {
+    const { networkId, ...locationData } = data;
+    
+    const fullData: Prisma.StorageLocationCreateInput = {
+      ...locationData,
+    };
+
+    // Добавляем сеть если указана
+    if (networkId) {
+      fullData.network = {
+        connect: { id: networkId }
+      };
+    }
+
+    return this.prisma.storageLocation.create({
+      data: fullData,
+    });
+  }
+
+  async createInventoryCategory(data: Prisma.InventoryCategoryCreateInput & { networkId?: string }) {
+    const { networkId, ...categoryData } = data;
+    
+    const fullData: Prisma.InventoryCategoryCreateInput = {
+      ...categoryData,
+    };
+
+    // Добавляем сеть если указана
+    if (networkId) {
+      fullData.network = {
+        connect: { id: networkId }
+      };
+    }
+
+    return this.prisma.inventoryCategory.create({
+      data: fullData,
+      include: {
+        parent: true,
+        children: true,
+        inventoryItems: true,
+        network: true,
+      },
+    });
+  }
+
+  async createPremix(data: Prisma.PremixCreateInput & { networkId?: string }) {
+    return this.prisma.$transaction(async (prisma) => {
+      const { networkId, ...premixData } = data;
+      
+      // Create inventory item first
+      const inventoryItem = await prisma.inventoryItem.create({
+        data: {
+          name: premixData.name as string,
+          description: premixData.description as string,
+          unit: premixData.unit as string,
+          isActive: true,
+          network: networkId ? {
+            connect: { id: networkId }
+          } : undefined,
+        },
+      });
+
+      // Then create premix with ingredients
+      const premix = await prisma.premix.create({
+        data: {
+          ...premixData,
+          inventoryItem: {
+            connect: { id: inventoryItem.id },
+          },
+          network: networkId ? {
+            connect: { id: networkId }
+          } : undefined,
+        },
+        include: {
+          ingredients: {
+            include: {
+              inventoryItem: true,
+            },
+          },
+          inventoryItem: true,
+          network: true,
+        },
+      });
+
+      return premix;
+    });
+  }
+
+
 }

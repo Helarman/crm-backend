@@ -718,6 +718,9 @@ model InventoryItem {
   category             InventoryCategory?     @relation(fields: [categoryId], references: [id])
   categoryId           String?                @map("category_id")
 
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
+
   @@map("inventory_items")
 }
 
@@ -737,6 +740,8 @@ model InventoryCategory {
   children InventoryCategory[] @relation("InventoryCategoryToChildren")
 
   inventoryItems InventoryItem[]
+  network        Network?        @relation(fields: [networkId], references: [id])
+  networkId      String?         @map("network_id")
 
   @@map("inventory_categories")
 }
@@ -756,6 +761,9 @@ model StorageLocation {
 
   inventoryItems InventoryItem[]
   WarehouseItem  WarehouseItem[]
+
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
 
   @@map("storage_locations")
 }
@@ -783,6 +791,9 @@ model Premix {
 
   ingredients   PremixIngredient[]
   inventoryItem InventoryItem?
+  
+  network       Network?           @relation(fields: [networkId], references: [id])
+  networkId     String?            @map("network_id")
 
   @@map("premixes")
 }
@@ -1020,11 +1031,15 @@ model Network {
   currentTariff   NetworkTariff? @relation(fields: [currentTariffId], references: [id])
   currentTariffId String?        @map("current_tariff_id")
 
-  transactions NetworkTransaction[]
-  Product      Product[]
-  Category     Category[]
-  Additive     Additive[]
-  Workshop     Workshop[]
+  transactions      NetworkTransaction[]
+  Product           Product[]
+  Category          Category[]
+  Additive          Additive[]
+  Workshop          Workshop[]
+  InventoryItem     InventoryItem[]
+  InventoryCategory InventoryCategory[]
+  StorageLocation   StorageLocation[]
+  Premix            Premix[]
 
   @@map("networks")
 }
