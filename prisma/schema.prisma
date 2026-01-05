@@ -75,6 +75,46 @@ model UserWorkshop {
   @@map("user_workshop")
 }
 
+enum OrderAdditiveType {
+  FIXED
+  PER_ITEM
+  PER_PERSON
+}
+
+model OrderAdditive {
+  id                 String               @id @default(cuid())
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  title              String
+  description        String?
+  price              Int
+  type               OrderAdditiveType    @default(FIXED)
+  orderTypes         EnumOrderType[]
+  inventoryItem      InventoryItem?       @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId    String?              @map("inventory_item_id")
+  ingredientQuantity Float?               @default(1.0) @map("ingredient_quantity")
+  network            Network?             @relation(fields: [networkId], references: [id])
+  networkId          String?              @map("network_id")
+  orders             OrderOrderAdditive[]
+  isActive           Boolean              @default(true)
+
+  @@map("order_additives")
+}
+
+model OrderOrderAdditive {
+  id              String        @id @default(cuid())
+  orderId         String        @map("order_id")
+  orderAdditiveId String        @map("order_additive_id")
+  order           Order         @relation(fields: [orderId], references: [id])
+  orderAdditive   OrderAdditive @relation(fields: [orderAdditiveId], references: [id])
+  quantity        Int           @default(1)
+  price           Int
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@unique([orderId, orderAdditiveId])
+  @@map("order_order_additives")
+}
+
 model DeliveryZone {
   id           String     @id @default(uuid())
   title        String
@@ -239,13 +279,17 @@ model RestaurantProductPrice {
 }
 
 model Additive {
-  id         String      @id @default(cuid())
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
-  title      String
-  price      Int
-  products   Product[]   @relation("ProductAdditives")
-  orderItems OrderItem[] @relation("OrderItemAdditives")
+  id              String         @id @default(cuid())
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  title           String
+  price           Int
+  products        Product[]      @relation("ProductAdditives")
+  orderItems      OrderItem[]    @relation("OrderItemAdditives")
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String?        @map("inventory_item_id")
+
+  ingredientQuantity Float? @default(1.0) @map("ingredient_quantity")
 
   network   Network? @relation(fields: [networkId], references: [id])
   networkId String?  @map("network_id")
@@ -263,13 +307,13 @@ model Category {
   slug        String? @unique
   image       String?
 
-  metaTitle       String? @map("meta_title")
-  metaDescription String? @map("meta_description")
-  metaKeywords    String? @map("meta_keywords")
-
-  parentId String?    @map("parent_id")
-  parent   Category?  @relation("CategoryToChildren", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryToChildren")
+  metaTitle       String?    @map("meta_title")
+  metaDescription String?    @map("meta_description")
+  metaKeywords    String?    @map("meta_keywords")
+  metaContent     String?
+  parentId        String?    @map("parent_id")
+  parent          Category?  @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children        Category[] @relation("CategoryToChildren")
 
   order       Int @default(0)
   clientOrder Int @default(0) @map("client_order")
@@ -453,11 +497,12 @@ model Order {
   isRefund         Boolean    @default(false) @map("is_refund")
   logs             OrderLog[]
 
-  deliveryStartedAt  DateTime?         @map("delivery_started_at")
-  deliveryCourier    User?             @relation("OrderDeliveryCourier", fields: [deliveryCourierId], references: [id])
-  deliveryCourierId  String?           @map("delivery_courier_id")
-  personalDiscountId String?           @map("personal_discount_id")
-  personalDiscount   PersonalDiscount? @relation(fields: [personalDiscountId], references: [id])
+  deliveryStartedAt   DateTime?            @map("delivery_started_at")
+  deliveryCourier     User?                @relation("OrderDeliveryCourier", fields: [deliveryCourierId], references: [id])
+  deliveryCourierId   String?              @map("delivery_courier_id")
+  personalDiscountId  String?              @map("personal_discount_id")
+  personalDiscount    PersonalDiscount?    @relation(fields: [personalDiscountId], references: [id])
+  orderOrderAdditives OrderOrderAdditive[]
 
   @@map("orders")
 }
@@ -718,8 +763,10 @@ model InventoryItem {
   category             InventoryCategory?     @relation(fields: [categoryId], references: [id])
   categoryId           String?                @map("category_id")
 
-  network   Network? @relation(fields: [networkId], references: [id])
-  networkId String?  @map("network_id")
+  network        Network?        @relation(fields: [networkId], references: [id])
+  networkId      String?         @map("network_id")
+  additives      Additive[]
+  orderAdditives OrderAdditive[]
 
   @@map("inventory_items")
 }
@@ -791,9 +838,9 @@ model Premix {
 
   ingredients   PremixIngredient[]
   inventoryItem InventoryItem?
-  
-  network       Network?           @relation(fields: [networkId], references: [id])
-  networkId     String?            @map("network_id")
+
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
 
   @@map("premixes")
 }
@@ -1040,6 +1087,7 @@ model Network {
   InventoryCategory InventoryCategory[]
   StorageLocation   StorageLocation[]
   Premix            Premix[]
+  orderAdditives    OrderAdditive[]
 
   @@map("networks")
 }

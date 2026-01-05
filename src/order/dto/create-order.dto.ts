@@ -1,6 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EnumOrderType, EnumPaymentMethod, EnumSurchargeType } from '@prisma/client';
-import { IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 export class OrderItemDto {
   @ApiProperty()
@@ -37,6 +38,20 @@ export class OrderSurchargeDto {
   description?: string;
 }
 
+
+export class OrderAdditiveDto {
+  @ApiProperty({ description: 'ID модификатора заказа' })
+  @IsString()
+  @IsNotEmpty()
+  orderAdditiveId: string;
+
+  @ApiPropertyOptional({ description: 'Количество', default: 1 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  quantity?: number = 1;
+}
+
 export class CreateOrderDto {
   @ApiProperty({ required: false })
   customerId?: string;
@@ -48,7 +63,7 @@ export class CreateOrderDto {
   shiftId?: string;
 
   @ApiProperty({ required: false })
-  phone?: string; 
+  phone?: string;
 
   @ApiProperty()
   type: EnumOrderType;
@@ -91,7 +106,17 @@ export class CreateOrderDto {
 
   @ApiProperty({ type: [OrderSurchargeDto], required: false })
   surcharges?: OrderSurchargeDto[];
+  @ApiPropertyOptional({
+    description: 'Модификаторы заказа (дополнительные услуги)',
+    type: [OrderAdditiveDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderAdditiveDto)
+  orderAdditives?: OrderAdditiveDto[];
 }
+
 
 export class AssignShiftDto {
   @ApiProperty({ description: 'ID смены' })

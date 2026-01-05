@@ -1,6 +1,7 @@
-import { EnumOrderStatus, EnumPaymentStatus, EnumPaymentMethod, EnumOrderType } from '@prisma/client';
+import { EnumOrderStatus, EnumPaymentStatus, EnumPaymentMethod, EnumOrderType, OrderAdditiveType } from '@prisma/client';
 
 export class OrderResponse {
+  orderAdditives?: OrderAdditiveResponse[];
   source?: string;
   id: string;
   number?: number;
@@ -136,4 +137,22 @@ export class OrderResponse {
     isRefund: boolean;
   };
   restaurnat?: any
+}
+
+
+export class OrderAdditiveResponse {
+  id: string;
+  orderAdditiveId: string;
+  quantity: number;
+  price: number;
+  totalPrice: number;
+  createdAt: Date;
+  orderAdditive: {
+    id: string;
+    title: string;
+    description?: string;
+    type: OrderAdditiveType;
+    network?: any;
+    inventoryItem?: any;
+  };
 }

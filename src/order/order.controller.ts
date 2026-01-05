@@ -12,6 +12,7 @@ import {
   ParseArrayPipe,
   ParseBoolPipe,
   HttpStatus,
+  Put,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,6 +20,8 @@ import {
   ApiResponse,
   ApiTags,
   ApiQuery,
+  ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { OrderService } from './order.service';
 import { AssignShiftDto, CreateOrderDto } from './dto/create-order.dto';
@@ -39,7 +42,7 @@ import { AssignCourierDto } from './dto/assign-courier.dto';
 @ApiTags('Заказы')
 @Controller('orders')
 export class OrderController {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(private readonly orderService: OrderService) { }
 
   @Post()
   @ApiOperation({ summary: 'Создать новый заказ' })
@@ -57,10 +60,10 @@ export class OrderController {
 
   @Get('restaurant/:restaurantId')
   @ApiOperation({ summary: 'Получить заказы по ресторану' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Список заказов ресторана', 
-    type: [OrderResponse] 
+  @ApiResponse({
+    status: 200,
+    description: 'Список заказов ресторана',
+    type: [OrderResponse]
   })
   async getOrdersByRestaurant(
     @Param('restaurantId') restaurantId: string
@@ -140,10 +143,10 @@ export class OrderController {
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Обновить статус заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Статус заказа обновлен', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Статус заказа обновлен',
+    type: OrderResponse
   })
   async updateOrderStatus(
     @Param('id') id: string,
@@ -154,10 +157,10 @@ export class OrderController {
 
   @Patch(':orderId/items/:itemId/status')
   @ApiOperation({ summary: 'Обновить статус элемента заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Статус элемента заказа обновлен', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Статус элемента заказа обновлен',
+    type: OrderResponse
   })
   async updateOrderItemStatus(
     @Param('orderId') orderId: string,
@@ -169,10 +172,10 @@ export class OrderController {
 
   @Patch(':id/items/status')
   @ApiOperation({ summary: 'Массовое обновление статусов элементов заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Статусы элементов обновлены', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Статусы элементов обновлены',
+    type: OrderResponse
   })
   async bulkUpdateOrderItemsStatus(
     @Param('id') orderId: string,
@@ -183,10 +186,10 @@ export class OrderController {
 
   @Post(':orderId/items')
   @ApiOperation({ summary: 'Добавить позицию в заказ' })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'Позиция добавлена в заказ', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 201,
+    description: 'Позиция добавлена в заказ',
+    type: OrderResponse
   })
   async addItemToOrder(
     @Param('orderId') orderId: string,
@@ -197,10 +200,10 @@ export class OrderController {
 
   @Patch(':orderId/items/:itemId')
   @ApiOperation({ summary: 'Обновить позицию в заказе' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Позиция обновлена', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Позиция обновлена',
+    type: OrderResponse
   })
   async updateOrderItem(
     @Param('orderId') orderId: string,
@@ -212,10 +215,10 @@ export class OrderController {
 
   @Delete(':orderId/items/:itemId')
   @ApiOperation({ summary: 'Удалить позицию из заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Позиция удалена из заказа', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Позиция удалена из заказа',
+    type: OrderResponse
   })
   async removeItemFromOrder(
     @Param('orderId') orderId: string,
@@ -226,10 +229,10 @@ export class OrderController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Обновить информацию о заказе' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Информация о заказе обновлена', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Информация о заказе обновлена',
+    type: OrderResponse
   })
   async updateOrder(
     @Param('id') id: string,
@@ -240,10 +243,10 @@ export class OrderController {
 
   @Patch(':id/attention-flags')
   @ApiOperation({ summary: 'Обновить флаги внимания заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Флаги внимания обновлены', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Флаги внимания обновлены',
+    type: OrderResponse
   })
   async updateAttentionFlags(
     @Param('id') id: string,
@@ -254,26 +257,26 @@ export class OrderController {
 
   @Post(':orderId/items/:itemId/refund')
   @ApiOperation({ summary: 'Вернуть блюдо в заказе' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Блюдо возвращено', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Блюдо возвращено',
+    type: OrderResponse
   })
-async refundItem(
-  @Param('orderId') orderId: string,
-  @Param('itemId') itemId: string,
-  @Body() dto: { reason: string; userId?: string },
-) {
-  const userId = dto.userId
-  return this.orderService.refundOrderItem(orderId, itemId, dto.reason, userId);
-}
+  async refundItem(
+    @Param('orderId') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: { reason: string; userId?: string },
+  ) {
+    const userId = dto.userId
+    return this.orderService.refundOrderItem(orderId, itemId, dto.reason, userId);
+  }
 
   @Patch(':id/customer')
   @ApiOperation({ summary: 'Привязать клиента к заказу' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Клиент привязан к заказу', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Клиент привязан к заказу',
+    type: OrderResponse
   })
   async applyCustomerToOrder(
     @Param('id') id: string,
@@ -284,10 +287,10 @@ async refundItem(
 
   @Post(':id/apply-discount')
   @ApiOperation({ summary: 'Применить скидку клиента к заказу' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Скидка применена', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Скидка применена',
+    type: OrderResponse
   })
   async applyCustomerDiscount(
     @Param('id') id: string,
@@ -303,14 +306,14 @@ async refundItem(
   ): Promise<OrderResponse> {
     return this.orderService.applyCustomerPersonalDiscount(id);
   }
-  
+
 
   @Post(':id/apply-points')
   @ApiOperation({ summary: 'Применить бонусные баллы клиента к заказу' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Бонусные баллы применены', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Бонусные баллы применены',
+    type: OrderResponse
   })
   async applyCustomerPoints(
     @Param('id') id: string,
@@ -321,10 +324,10 @@ async refundItem(
 
   @Delete(':id/remove-points')
   @ApiOperation({ summary: 'Удалить бонусные баллы из заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Бонусные баллы удалены', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Бонусные баллы удалены',
+    type: OrderResponse
   })
   async removeCustomerPoints(
     @Param('id') id: string
@@ -334,10 +337,10 @@ async refundItem(
 
   @Delete(':id/customer')
   @ApiOperation({ summary: 'Отвязать клиента от заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Клиент отвязан от заказа', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Клиент отвязан от заказа',
+    type: OrderResponse
   })
   async removeCustomerFromOrder(
     @Param('id') id: string
@@ -347,10 +350,10 @@ async refundItem(
 
   @Delete(':id/discount')
   @ApiOperation({ summary: 'Удалить скидку из заказа' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Скидка удалена', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Скидка удалена',
+    type: OrderResponse
   })
   async removeCustomerDiscount(
     @Param('id') id: string
@@ -362,7 +365,7 @@ async refundItem(
   @ApiOperation({ summary: 'Применить скидку к заказу' })
   async applyDiscountToOrder(
     @Param('orderId') orderId: string,
-     @Param('discountId') discountId: string,
+    @Param('discountId') discountId: string,
   ): Promise<OrderResponse> {
     return this.orderService.applyDiscountToOrder(orderId, discountId);
   }
@@ -404,13 +407,13 @@ async refundItem(
       dto.userId,
     );
   }
-  
+
   @Patch(':id/shift')
   @ApiOperation({ summary: 'Привязать заказ к смене' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Заказ привязан к смене', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Заказ привязан к смене',
+    type: OrderResponse
   })
   async assignOrderToShift(
     @Param('id') id: string,
@@ -432,12 +435,12 @@ async refundItem(
     return this.orderService.cancelAllActiveOrders(restaurantId);
   }
 
-     @Post(':id/assign-courier')
+  @Post(':id/assign-courier')
   @ApiOperation({ summary: 'Назначить курьера на доставку' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Курьер назначен на доставку', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Курьер назначен на доставку',
+    type: OrderResponse
   })
   async assignCourierToDelivery(
     @Param('id') id: string,
@@ -448,10 +451,10 @@ async refundItem(
 
   @Post(':id/start-delivery')
   @ApiOperation({ summary: 'Начать доставку' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Доставка начата', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Доставка начата',
+    type: OrderResponse
   })
   async startDelivery(
     @Param('id') id: string
@@ -461,10 +464,10 @@ async refundItem(
 
   @Post(':id/complete-delivery')
   @ApiOperation({ summary: 'Завершить доставку' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Доставка завершена', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Доставка завершена',
+    type: OrderResponse
   })
   async completeDelivery(
     @Param('id') id: string
@@ -474,10 +477,10 @@ async refundItem(
 
   @Delete(':id/courier')
   @ApiOperation({ summary: 'Удалить курьера из доставки' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Курьер удален из доставки', 
-    type: OrderResponse 
+  @ApiResponse({
+    status: 200,
+    description: 'Курьер удален из доставки',
+    type: OrderResponse
   })
   async removeCourierFromDelivery(
     @Param('id') id: string
@@ -487,10 +490,10 @@ async refundItem(
 
   @Get('delivery/active')
   @ApiOperation({ summary: 'Получить активные заказы доставки' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Список активных заказов доставки', 
-    type: [OrderResponse] 
+  @ApiResponse({
+    status: 200,
+    description: 'Список активных заказов доставки',
+    type: [OrderResponse]
   })
   @ApiQuery({ name: 'restaurantId', required: false, type: String })
   async getDeliveryOrders(
@@ -501,14 +504,62 @@ async refundItem(
 
   @Get('courier/:courierId/active-deliveries')
   @ApiOperation({ summary: 'Получить активные доставки курьера' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Список активных доставок курьера', 
-    type: [OrderResponse] 
+  @ApiResponse({
+    status: 200,
+    description: 'Список активных доставок курьера',
+    type: [OrderResponse]
   })
   async getCourierActiveDeliveries(
     @Param('courierId') courierId: string
   ): Promise<OrderResponse[]> {
     return this.orderService.getCourierActiveDeliveries(courierId);
   }
+
+  @Post(':orderId/order-additives/:orderAdditiveId')
+  @ApiOperation({ summary: 'Добавить модификатор заказа к заказу' })
+  @ApiParam({ name: 'orderId', description: 'ID заказа' })
+  @ApiParam({ name: 'orderAdditiveId', description: 'ID модификатора заказа' })
+  @ApiResponse({ status: 200, description: 'Модификатор заказа добавлен' })
+  addOrderAdditiveToOrder(
+    @Param('orderId') orderId: string,
+    @Param('orderAdditiveId') orderAdditiveId: string,
+    @Query('quantity') quantity: number = 1,
+  ): Promise<OrderResponse> {
+    return this.orderService.addOrderAdditiveToOrder(orderId, orderAdditiveId, quantity);
+  }
+
+  @Delete(':orderId/order-additives/:orderAdditiveId')
+  @ApiOperation({ summary: 'Удалить модификатор заказа из заказа' })
+  @ApiParam({ name: 'orderId', description: 'ID заказа' })
+  @ApiParam({ name: 'orderAdditiveId', description: 'ID модификатора заказа' })
+  @ApiResponse({ status: 200, description: 'Модификатор заказа удален' })
+  removeOrderAdditiveFromOrder(
+    @Param('orderId') orderId: string,
+    @Param('orderAdditiveId') orderAdditiveId: string,
+  ): Promise<OrderResponse> {
+    return this.orderService.removeOrderAdditiveFromOrder(orderId, orderAdditiveId);
+  }
+
+  @Put(':orderId/order-additives')
+  @ApiOperation({ summary: 'Обновить модификаторы заказа' })
+  @ApiParam({ name: 'orderId', description: 'ID заказа' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        orderAdditiveIds: {
+          type: 'array',
+          items: { type: 'string' }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 200, description: 'Модификаторы заказа обновлены' })
+  updateOrderAdditives(
+    @Param('orderId') orderId: string,
+    @Body('orderAdditiveIds') orderAdditiveIds: string[],
+  ): Promise<OrderResponse> {
+    return this.orderService.updateOrderAdditives(orderId, orderAdditiveIds);
+  }
+
 }

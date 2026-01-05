@@ -56,6 +56,15 @@ export class CategoryDto {
   @IsOptional()
   metaDescription?: string;
 
+   @ApiProperty({
+    example: '<h1>О напитках</h1><p>Подробный контент о напитках...</p>',
+    description: 'HTML контент для страницы категории (мета-контент)',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  metaContent?: string; 
+
   @ApiProperty({
     example: 'напитки, кофе, чай, лимонады',
     description: 'Ключевые слова для SEO',

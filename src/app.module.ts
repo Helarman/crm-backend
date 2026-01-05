@@ -23,6 +23,7 @@ import { DictionariesModule } from './dictionaries/dictionaries.module';
 import { MigrationModule } from './migration/migration.module';
 import { ScheduleModule } from '@nestjs/schedule'
 import { PaymentIntegrationModule } from './payment-integration/payment-integration.module';
+import { OrderAdditiveModule } from './order-additive/order-additive.module';
 
 @Module({
 	imports: [
@@ -46,6 +47,7 @@ import { PaymentIntegrationModule } from './payment-integration/payment-integrat
 		DiscountsModule,
 		NetworkModule,
 		TenantModule,
+		OrderAdditiveModule,
 		DictionariesModule,
 		OrderLogModule,
 		PaymentIntegrationModule
