@@ -4,7 +4,7 @@ import { CreateSurchargeDto } from './dto/create-surcharge.dto';
 import { UpdateSurchargeDto } from './dto/update-surcharge.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { SurchargeResponseDto } from './dto/surcharge-response.dto';
-import { EnumOrderType as OrderType} from '@prisma/client';
+import { EnumOrderType as OrderType } from '@prisma/client';
 
 @ApiTags('Надбавки (Surcharges)')
 @Controller('surcharges')
@@ -25,7 +25,7 @@ export class SurchargeController {
   @ApiOperation({ summary: 'Получить список всех надбавок' })
   @ApiResponse({ status: 200, description: 'Список надбавок', type: [SurchargeResponseDto] })
   findAll() {
-    return this.surchargeService.findAll();
+    return this.surchargeService.findAll;
   }
 
   @Get(':id')
@@ -41,7 +41,7 @@ export class SurchargeController {
   @ApiResponse({ status: 200, description: 'Надбавка обновлена', type: SurchargeResponseDto })
   @ApiResponse({ status: 404, description: 'Надбавка не найдена' })
   update(@Param('id') id: string, @Body() updateSurchargeDto: UpdateSurchargeDto) {
-       if (typeof updateSurchargeDto.amount === 'string') {
+    if (typeof updateSurchargeDto.amount === 'string') {
       updateSurchargeDto.amount = Number(updateSurchargeDto.amount);
     }
     return this.surchargeService.update(id, updateSurchargeDto);
@@ -58,11 +58,24 @@ export class SurchargeController {
   @Get('for-order/:orderType')
   @ApiOperation({ summary: 'Получить надбавки для типа заказа' })
   @ApiQuery({ name: 'restaurantId', required: false, description: 'ID ресторана для фильтрации' })
+  @ApiQuery({ name: 'networkId', required: false, description: 'ID сети для фильтрации' })
   @ApiResponse({ status: 200, description: 'Список надбавок', type: [SurchargeResponseDto] })
   getForOrder(
     @Param('orderType') orderType: OrderType,
-    @Query('restaurantId') restaurantId?: string
+    @Query('restaurantId') restaurantId?: string,
+    @Query('networkId') networkId?: string
   ) {
-    return this.surchargeService.getSurchargesForOrder(orderType, restaurantId);
+    return this.surchargeService.getSurchargesForOrder(orderType, restaurantId, networkId);
+  }
+
+  @Get('network/:networkId')
+  @ApiOperation({ summary: 'Получить все надбавки для сети' })
+  @ApiQuery({ name: 'activeOnly', required: false, description: 'Только активные надбавки', type: Boolean })
+  @ApiResponse({ status: 200, description: 'Список надбавок сети', type: [SurchargeResponseDto] })
+  getByNetwork(
+    @Param('networkId') networkId: string,
+    @Query('activeOnly') activeOnly?: boolean
+  ) {
+    return this.surchargeService.getSurchargesByNetwork(networkId, activeOnly);
   }
 }
