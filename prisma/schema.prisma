@@ -202,6 +202,8 @@ model Restaurant {
   sundayIsWorking Boolean   @default(false) @map("sunday_is_working")
 
   categories Category[] @relation("CategoryToRestaurant")
+  Hall       Hall[]
+  TableTag   TableTag[]
 
   @@map("restaurant")
 }
@@ -1201,6 +1203,108 @@ model ReasonExpense {
 
   @@unique([name, restaurantId])
   @@map("reason_expenses")
+}
+
+model Hall {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String?
+  polygon     String? // GeoJSON полигон для плана зала
+  color       String  @default("#3B82F6")
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String     @map("restaurant_id")
+
+  tables Table[]
+
+  @@map("halls")
+}
+
+enum TableShape {
+  RECTANGLE
+  CIRCLE
+  SQUARE
+  OVAL
+}
+
+enum TableStatus {
+  AVAILABLE // Свободен
+  OCCUPIED // Занят
+  RESERVED // Забронирован
+  OUT_OF_SERVICE // Не обслуживается
+  CLEANING // На уборке
+}
+
+model Table {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  name        String
+  description String?
+  seats       Int         @default(1)
+  shape       TableShape  @default(RECTANGLE)
+  status      TableStatus @default(AVAILABLE)
+
+  // Позиция и размеры на плане
+  positionX Float? @map("position_x")
+  positionY Float? @map("position_y")
+  width     Float?
+  height    Float?
+  radius    Float?
+
+  color    String  @default("#3B82F6")
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  hallId String @map("hall_id")
+
+  parentTable   Table?  @relation("TableHierarchy", fields: [parentTableId], references: [id])
+  parentTableId String? @map("parent_table_id")
+  childTables   Table[] @relation("TableHierarchy")
+
+  // Теги стола
+  tags          TableTag[]
+  TableTableTag TableTableTag[]
+
+  @@map("tables")
+}
+
+model TableTag {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  name        String
+  description String?
+  color       String  @default("#6B7280")
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  restaurantId String     @map("restaurant_id")
+
+  tables        Table[]
+  TableTableTag TableTableTag[]
+
+  @@map("table_tags")
+}
+
+model TableTableTag {
+  tableId   String   @map("table_id")
+  tagId     String   @map("tag_id")
+  table     Table    @relation(fields: [tableId], references: [id])
+  tag       TableTag @relation(fields: [tagId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([tableId, tagId])
+  @@map("table_table_tags")
 }
 
 enum BonusTransactionType {
