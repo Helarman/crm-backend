@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EnumSurchargeType as SurchargeType, EnumOrderType as OrderType } from '@prisma/client';
 import { Transform } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateSurchargeDto {
     @ApiProperty({ example: 'Доставка', description: 'Название надбавки' })
@@ -30,4 +31,9 @@ export class CreateSurchargeDto {
 
     @ApiProperty({ example: ['restaurantId1', 'restaurantId2'], description: 'ID ресторанов', required: false })
     restaurantIds?: string[];
+
+    @ApiProperty({ example: 'cln3e8xjh000008l49y5r3z6a', description: 'ID сети', required: false })
+    @IsOptional()
+    @IsString()
+    networkId?: string;
 }

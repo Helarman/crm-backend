@@ -914,6 +914,9 @@ model Surcharge {
   startDate DateTime? @map("start_date")
   endDate   DateTime? @map("end_date")
 
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
+
   @@map("surcharges")
 }
 
@@ -958,11 +961,12 @@ model Discount {
 
   targetType     DiscountTargetType @default(ALL)
   minOrderAmount Float?             @map("min_order_amount")
-
-  startDate DateTime? @map("start_date")
-  endDate   DateTime? @map("end_date")
-  startTime Int?      @map("start_time") // Час начала действия (0-23)
-  endTime   Int?      @map("end_time") // Час окончания действия (0-23)
+  maxOrderAmount Float?             @map("max_order_amount")
+  
+  startDate      DateTime?          @map("start_date")
+  endDate        DateTime?          @map("end_date")
+  startTime      Int?               @map("start_time") // Час начала действия (0-23)
+  endTime        Int?               @map("end_time") // Час окончания действия (0-23)
 
   isActive    Boolean @default(true)
   code        String? // Базовый промо-код (если есть)
@@ -974,6 +978,9 @@ model Discount {
 
   applications DiscountApplication[]
   promocodes   PromoCode[]
+
+  network   Network? @relation(fields: [networkId], references: [id])
+  networkId String?  @map("network_id")
 
   @@map("discounts")
 }
@@ -1090,6 +1097,8 @@ model Network {
   StorageLocation   StorageLocation[]
   Premix            Premix[]
   orderAdditives    OrderAdditive[]
+  Discount          Discount[]
+  surcharges        Surcharge[]
 
   @@map("networks")
 }

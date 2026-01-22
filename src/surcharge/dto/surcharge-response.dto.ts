@@ -29,6 +29,9 @@ export class SurchargeResponseDto {
   @ApiProperty({ example: '2023-12-31T23:59:59Z', description: 'Дата окончания действия', required: false })
   endDate: Date | null;
 
+  @ApiProperty({ example: 'cln3e8xjh000008l49y5r3z6a', description: 'ID сети', required: false })
+  networkId: string | null;
+
   @ApiProperty({ example: '2023-01-01T00:00:00Z', description: 'Дата создания' })
   createdAt: Date;
 
