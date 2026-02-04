@@ -24,6 +24,7 @@ import { MigrationModule } from './migration/migration.module';
 import { ScheduleModule } from '@nestjs/schedule'
 import { PaymentIntegrationModule } from './payment-integration/payment-integration.module';
 import { OrderAdditiveModule } from './order-additive/order-additive.module';
+import { TablesModule } from './tables/tables.module';
 
 @Module({
 	imports: [
@@ -50,7 +51,8 @@ import { OrderAdditiveModule } from './order-additive/order-additive.module';
 		OrderAdditiveModule,
 		DictionariesModule,
 		OrderLogModule,
-		PaymentIntegrationModule
+		PaymentIntegrationModule,
+		TablesModule
 	]
 })
 export class AppModule {}

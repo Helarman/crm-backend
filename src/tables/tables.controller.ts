@@ -31,8 +31,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('tables')
 @Controller('tables')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 export class TablesController {
   constructor(private readonly tablesService: TablesService) {}
 
