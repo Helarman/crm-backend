@@ -15,7 +15,75 @@ export class TablesService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ========== ЗАЛЫ ==========
+async getHallLayout(id: string) {
+    const hall = await this.prisma.hall.findUnique({
+      where: { id },
+      include: {
+        walls: { orderBy: { order: 'asc' } },
+        doors: { orderBy: { order: 'asc' } },
+        windows: { orderBy: { order: 'asc' } },
+        guides: { orderBy: { order: 'asc' } },
+      },
+    });
 
+    if (!hall) {
+      throw new NotFoundException('Зал не найден');
+    }
+
+    return hall;
+  }
+
+async saveHallLayout(id: string, layout: {
+  walls: any[];
+  doors: any[];
+  windows: any[];
+  guides: any[];
+}) {
+  const hall = await this.prisma.hall.findUnique({
+    where: { id },
+  });
+
+  if (!hall) {
+    throw new NotFoundException('Зал не найден');
+  }
+
+  await Promise.all([
+    this.prisma.wall.deleteMany({ where: { hallId: id } }),
+    this.prisma.door.deleteMany({ where: { hallId: id } }),
+    this.prisma.window.deleteMany({ where: { hallId: id } }),
+    this.prisma.guide.deleteMany({ where: { hallId: id } }),
+  ]);
+
+  // Создаем новые элементы
+  const [walls, doors, windows, guides] = await Promise.all([
+    this.prisma.wall.createMany({
+      data: layout.walls.map(wall => ({
+        ...wall,
+        hallId: id,
+      })),
+    }),
+    this.prisma.door.createMany({
+      data: layout.doors.map(door => ({
+        ...door,
+        hallId: id,
+      })),
+    }),
+    this.prisma.window.createMany({
+      data: layout.windows.map(window => ({
+        ...window,
+        hallId: id,
+      })),
+    }),
+    this.prisma.guide.createMany({
+      data: layout.guides.map(guide => ({
+        ...guide,
+        hallId: id,
+      })),
+    }),
+  ]);
+
+  return this.getHallLayout(id);
+}
   async createHall(dto: CreateHallDto) {
     // Проверяем существование ресторана
     const restaurant = await this.prisma.restaurant.findUnique({

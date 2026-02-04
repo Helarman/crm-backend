@@ -1221,7 +1221,7 @@ model Hall {
 
   title       String
   description String?
-  polygon     String? // GeoJSON полигон для плана зала
+  polygon     String? // GeoJSON полиgon для плана зала
   color       String  @default("#3B82F6")
   order       Int     @default(0)
   isActive    Boolean @default(true)
@@ -1230,8 +1230,105 @@ model Hall {
   restaurantId String     @map("restaurant_id")
 
   tables Table[]
+  walls   Wall[]
+  doors   Door[]
+  windows Window[]
+  guides  Guide[]
 
   @@map("halls")
+}
+
+model Wall {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hall        Hall     @relation(fields: [hallId], references: [id])
+  hallId      String   @map("hall_id")
+
+  x1          Float
+  y1          Float
+  x2          Float
+  y2          Float
+  length      Float
+  isHorizontal Boolean
+  isDiagonal  Boolean
+  angle       Float?
+  thickness   Float   @default(0.2) // Толщина стены в метрах
+  color       String  @default("#4B5563")
+  order       Int     @default(0)
+
+  doors   Door[]
+  windows Window[]
+
+  @@map("walls")
+}
+
+model Door {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hall        Hall     @relation(fields: [hallId], references: [id])
+  hallId      String   @map("hall_id")
+
+  wall        Wall?    @relation(fields: [wallId], references: [id])
+  wallId      String?  @map("wall_id")
+
+  x           Float    // Позиция на стене (0-1)
+  y           Float    // Высота от пола
+  width       Float    // Ширина двери в метрах
+  height      Float    // Высота двери в метрах
+  angle       Float?
+  orientation String   // horizontal, vertical, diagonal
+  color       String   @default("#92400E")
+  order       Int      @default(0)
+
+  @@map("doors")
+}
+
+model Window {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hall        Hall     @relation(fields: [hallId], references: [id])
+  hallId      String   @map("hall_id")
+
+  wall        Wall?    @relation(fields: [wallId], references: [id])
+  wallId      String?  @map("wall_id")
+
+  x           Float    // Позиция на стене (0-1)
+  y           Float    // Высота подоконника
+  width       Float    // Ширина окна в метрах
+  height      Float    // Высота окна в метрах
+  angle       Float?
+  orientation String   // horizontal, vertical, diagonal
+  color       String   @default("#1E40AF")
+  order       Int      @default(0)
+
+  @@map("windows")
+}
+
+model Guide {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hall        Hall     @relation(fields: [hallId], references: [id])
+  hallId      String   @map("hall_id")
+
+  x1          Float
+  y1          Float
+  x2          Float
+  y2          Float
+  isHorizontal Boolean
+  isDiagonal  Boolean
+  angle       Float?
+  color       String   @default("#7C3AED")
+  order       Int      @default(0)
+
+  @@map("guides")
 }
 
 enum TableShape {

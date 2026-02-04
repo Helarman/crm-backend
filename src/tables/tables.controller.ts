@@ -234,4 +234,24 @@ export class TablesController {
   releaseTableFromOrder(@Param('tableId') tableId: string) {
     return null;
   }
+
+  @Get('halls/:id/layout')
+  @ApiOperation({ summary: 'Получить полную планировку зала' })
+  getHallLayout(@Param('id') id: string) {
+    return this.tablesService.getHallLayout(id);
+  }
+
+  @Post('halls/:id/layout')
+  @ApiOperation({ summary: 'Сохранить планировку зала' })
+  saveHallLayout(
+    @Param('id') id: string,
+    @Body() layout: {
+      walls: any[];
+      doors: any[];
+      windows: any[];
+      guides: any[];
+    }
+  ) {
+    return this.tablesService.saveHallLayout(id, layout);
+  }
 }
