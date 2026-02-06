@@ -52,7 +52,8 @@ import { TablesModule } from './tables/tables.module';
 		DictionariesModule,
 		OrderLogModule,
 		PaymentIntegrationModule,
-		TablesModule
+		TablesModule,
+		RestaurantModule
 	]
 })
 export class AppModule {}

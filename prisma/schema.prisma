@@ -407,6 +407,7 @@ model Customer {
   promocodes           PromoCode[]
   personalDiscounts    PersonalDiscount[]
   bonusBalances        CustomerBonusBalance[]
+  Reservation          Reservation[]
 
   @@unique([phone, networkId])
   @@map("customer")
@@ -962,11 +963,11 @@ model Discount {
   targetType     DiscountTargetType @default(ALL)
   minOrderAmount Float?             @map("min_order_amount")
   maxOrderAmount Float?             @map("max_order_amount")
-  
-  startDate      DateTime?          @map("start_date")
-  endDate        DateTime?          @map("end_date")
-  startTime      Int?               @map("start_time") // Час начала действия (0-23)
-  endTime        Int?               @map("end_time") // Час окончания действия (0-23)
+
+  startDate DateTime? @map("start_date")
+  endDate   DateTime? @map("end_date")
+  startTime Int?      @map("start_time") // Час начала действия (0-23)
+  endTime   Int?      @map("end_time") // Час окончания действия (0-23)
 
   isActive    Boolean @default(true)
   code        String? // Базовый промо-код (если есть)
@@ -1229,7 +1230,7 @@ model Hall {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   restaurantId String     @map("restaurant_id")
 
-  tables Table[]
+  tables  Table[]
   walls   Wall[]
   doors   Door[]
   windows Window[]
@@ -1239,24 +1240,24 @@ model Hall {
 }
 
 model Wall {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  hall        Hall     @relation(fields: [hallId], references: [id])
-  hallId      String   @map("hall_id")
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  hallId String @map("hall_id")
 
-  x1          Float
-  y1          Float
-  x2          Float
-  y2          Float
-  length      Float
+  x1           Float
+  y1           Float
+  x2           Float
+  y2           Float
+  length       Float
   isHorizontal Boolean
-  isDiagonal  Boolean
-  angle       Float?
-  thickness   Float   @default(0.2) // Толщина стены в метрах
-  color       String  @default("#4B5563")
-  order       Int     @default(0)
+  isDiagonal   Boolean
+  angle        Float?
+  thickness    Float   @default(0.2) // Толщина стены в метрах
+  color        String  @default("#4B5563")
+  order        Int     @default(0)
 
   doors   Door[]
   windows Window[]
@@ -1265,68 +1266,68 @@ model Wall {
 }
 
 model Door {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  hall        Hall     @relation(fields: [hallId], references: [id])
-  hallId      String   @map("hall_id")
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  hallId String @map("hall_id")
 
-  wall        Wall?    @relation(fields: [wallId], references: [id])
-  wallId      String?  @map("wall_id")
+  wall   Wall?   @relation(fields: [wallId], references: [id])
+  wallId String? @map("wall_id")
 
-  x           Float    // Позиция на стене (0-1)
-  y           Float    // Высота от пола
-  width       Float    // Ширина двери в метрах
-  height      Float    // Высота двери в метрах
+  x           Float // Позиция на стене (0-1)
+  y           Float // Высота от пола
+  width       Float // Ширина двери в метрах
+  height      Float // Высота двери в метрах
   angle       Float?
-  orientation String   // horizontal, vertical, diagonal
-  color       String   @default("#92400E")
-  order       Int      @default(0)
+  orientation String // horizontal, vertical, diagonal
+  color       String @default("#92400E")
+  order       Int    @default(0)
 
   @@map("doors")
 }
 
 model Window {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  hall        Hall     @relation(fields: [hallId], references: [id])
-  hallId      String   @map("hall_id")
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  hallId String @map("hall_id")
 
-  wall        Wall?    @relation(fields: [wallId], references: [id])
-  wallId      String?  @map("wall_id")
+  wall   Wall?   @relation(fields: [wallId], references: [id])
+  wallId String? @map("wall_id")
 
-  x           Float    // Позиция на стене (0-1)
-  y           Float    // Высота подоконника
-  width       Float    // Ширина окна в метрах
-  height      Float    // Высота окна в метрах
+  x           Float // Позиция на стене (0-1)
+  y           Float // Высота подоконника
+  width       Float // Ширина окна в метрах
+  height      Float // Высота окна в метрах
   angle       Float?
-  orientation String   // horizontal, vertical, diagonal
-  color       String   @default("#1E40AF")
-  order       Int      @default(0)
+  orientation String // horizontal, vertical, diagonal
+  color       String @default("#1E40AF")
+  order       Int    @default(0)
 
   @@map("windows")
 }
 
 model Guide {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  hall        Hall     @relation(fields: [hallId], references: [id])
-  hallId      String   @map("hall_id")
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  hallId String @map("hall_id")
 
-  x1          Float
-  y1          Float
-  x2          Float
-  y2          Float
+  x1           Float
+  y1           Float
+  x2           Float
+  y2           Float
   isHorizontal Boolean
-  isDiagonal  Boolean
-  angle       Float?
-  color       String   @default("#7C3AED")
-  order       Int      @default(0)
+  isDiagonal   Boolean
+  angle        Float?
+  color        String  @default("#7C3AED")
+  order        Int     @default(0)
 
   @@map("guides")
 }
@@ -1342,7 +1343,7 @@ enum TableStatus {
   AVAILABLE // Свободен
   OCCUPIED // Занят
   RESERVED // Забронирован
-  OUT_OF_SERVICE // Не обслуживается
+  OUT_OFFm_SERVICE // Не обслуживается
   CLEANING // На уборке
 }
 
@@ -1378,6 +1379,7 @@ model Table {
   // Теги стола
   tags          TableTag[]
   TableTableTag TableTableTag[]
+  Reservation   Reservation[]
 
   @@map("tables")
 }
@@ -1411,6 +1413,64 @@ model TableTableTag {
 
   @@id([tableId, tagId])
   @@map("table_table_tags")
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  PENDING
+  ARRIVED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+enum ReservationSource {
+  PANEL
+  WEBSITE
+  MOBILE_APP
+  YANDEX_FOOD
+}
+
+model Reservation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Связь со столом
+  table   Table  @relation(fields: [tableId], references: [id])
+  tableId String @map("table_id")
+
+  // Связь с клиентом (опционально)
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?   @map("customer_id")
+
+  // Информация о клиенте
+  phone        String
+  customerName String  @map("customer_name")
+  email        String?
+
+  // Детали бронирования
+  reservationTime DateTime          @map("reservation_time")
+  status          ReservationStatus @default(CONFIRMED)
+  numberOfPeople  Int               @default(1) @map("number_of_people")
+  comment         String?
+
+  // Источник бронирования
+  source ReservationSource @default(PANEL)
+
+  // Временные метки
+  arrivalTime      DateTime? @map("arrival_time")
+  cancellationTime DateTime? @map("cancellation_time")
+
+  // Внешние ссылки
+  externalId String? @unique @map("external_id")
+
+  @@index([tableId])
+  @@index([customerId])
+  @@index([phone])
+  @@index([reservationTime])
+  @@index([status])
+  @@map("reservations")
 }
 
 enum BonusTransactionType {
