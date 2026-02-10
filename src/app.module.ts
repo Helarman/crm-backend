@@ -26,6 +26,7 @@ import { PaymentIntegrationModule } from './payment-integration/payment-integrat
 import { OrderAdditiveModule } from './order-additive/order-additive.module';
 import { TablesModule } from './tables/tables.module';
 import { ReservationsModule } from './reservation/reservations.module';
+import { OrderTableModule } from './order-tables/order-tables.module';
 
 @Module({
 	imports: [
@@ -54,7 +55,8 @@ import { ReservationsModule } from './reservation/reservations.module';
 		OrderLogModule,
 		PaymentIntegrationModule,
 		TablesModule,
-		ReservationsModule
+		ReservationsModule,
+		OrderTableModule
 
 	]
 })
