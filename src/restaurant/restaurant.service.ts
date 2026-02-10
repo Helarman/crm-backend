@@ -68,6 +68,7 @@ export class RestaurantService {
       longitude: dto.longitude,
       legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse || false,
+      useReservation: dto.useReservation || false,
       allowNegativeStock: dto.allowNegativeStock || false,
       acceptOrders: dto.acceptOrders ?? true,
       shiftCloseTime: dto.shiftCloseTime || new Date('1970-01-01T23:59:00.000Z'),
@@ -123,6 +124,7 @@ export class RestaurantService {
       longitude: dto.longitude,
       legalInfo: dto.legalInfo,
       useWarehouse: dto.useWarehouse,
+      useReservation: dto.useReservation,
       shiftCloseTime: dto.shiftCloseTime,
       allowNegativeStock: dto.allowNegativeStock || false,
       acceptOrders: dto.acceptOrders ?? true,
@@ -170,7 +172,6 @@ export class RestaurantService {
     });
   }
 
-  // ... rest of the methods remain unchanged
   async addUserToRestaurant(restaurantId: string, userId: string) {
     const restaurant = await this.prisma.restaurant.findUnique({
       where: { id: restaurantId },

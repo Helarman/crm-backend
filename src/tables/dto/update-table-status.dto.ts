@@ -11,13 +11,6 @@ export class UpdateTableStatusDto {
   @IsEnum(TableStatus)
   status: TableStatus;
 
-  @ApiProperty({ 
-    description: 'ID заказа (если стол занят)',
-    required: false 
-  })
-  @IsOptional()
-  @IsString()
-  orderId?: string;
 
   @ApiProperty({ 
     description: 'Причина изменения статуса',

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponse } from './dto/order-response.dto';
@@ -34,8 +34,79 @@ export class OrderService {
     private readonly orderAdditiveService: OrderAdditiveService
   ) { }
 
+  private async validateAndAssignTable(
+    tableId: string,
+    restaurantId: string,
+    orderId?: string,
+    orderType?: string
+  ) {
+    // Проверяем существование стола
+    const table = await this.prisma.table.findUnique({
+      where: { id: tableId },
+      include: { hall: true },
+    });
+
+    if (!table) {
+      throw new NotFoundException('Стол не найден');
+    }
+
+    // Проверяем, что стол принадлежит тому же ресторану
+    if (table.hall?.restaurantId !== restaurantId) {
+      throw new ConflictException('Стол принадлежит другому ресторану');
+    }
+
+    // Проверяем доступность стола
+    const isAvailable = await this.isTableAvailable(tableId, orderId);
+    if (!isAvailable) {
+      throw new ConflictException('Стол уже занят');
+    }
+
+    // Проверяем бронирования
+    const now = new Date();
+    const upcomingReservation = await this.prisma.reservation.findFirst({
+      where: {
+        tableId,
+        status: 'CONFIRMED',
+        reservationTime: {
+          gte: now,
+          lte: new Date(now.getTime() + 2 * 60 * 60 * 1000), // 2 часа
+        },
+      },
+    });
+
+    if (upcomingReservation) {
+      throw new ConflictException('На этот стол есть подтвержденная бронь в ближайшее время');
+    }
+
+    // Обновляем статус стола
+    await this.prisma.table.update({
+      where: { id: tableId },
+      data: { status: 'OCCUPIED' },
+    });
+
+    return true;
+  }
+
+  // Метод проверки доступности стола
+  private async isTableAvailable(tableId: string, excludeOrderId?: string): Promise<boolean> {
+    const activeOrders = await this.prisma.order.findMany({
+      where: {
+        tableId,
+        status: {
+          in: ['CREATED', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERING'],
+        },
+        ...(excludeOrderId && { id: { not: excludeOrderId } }),
+      },
+    });
+
+    return activeOrders.length === 0;
+}
+
   async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
+    if (dto.tableId) {
+      await this.validateAndAssignTable(dto.tableId, dto.restaurantId, null, dto.type);
+    }
 
     const stopListProducts = this.checkStopList(products, productPrices);
     if (stopListProducts.length > 0) {
@@ -1761,6 +1832,26 @@ export class OrderService {
       }
     };
   }
+  private async releaseTable(tableId: string, orderId: string) {
+    // Проверяем, есть ли другие активные заказы на этом столе
+    const otherActiveOrders = await this.prisma.order.findMany({
+      where: {
+        tableId,
+        status: {
+          in: ['CREATED', 'CONFIRMED', 'PREPARING', 'READY'],
+        },
+        id: { not: orderId },
+      },
+    });
+
+    // Если других активных заказов нет, освобождаем стол
+    if (otherActiveOrders.length === 0) {
+      await this.prisma.table.update({
+        where: { id: tableId },
+        data: { status: 'AVAILABLE' },
+      });
+    }
+  }
 
   async updateOrder(id: string, dto: UpdateOrderDto): Promise<OrderResponse> {
     const order = await this.prisma.order.findUnique({
@@ -1799,6 +1890,28 @@ export class OrderService {
       scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
     };
 
+    if (dto.tableId !== undefined) {
+    if (dto.tableId === null) {
+      // Отвязываем стол
+      if (order.tableId) {
+        await this.releaseTable(order.tableId, order.id);
+      }
+      updateData.table = { disconnect: true };
+      updateData.tableNumber = null;
+    } else {
+      // Привязываем новый стол
+      await this.validateAndAssignTable(dto.tableId, order.restaurantId, order.id, dto.type);
+      
+      // Освобождаем старый стол, если он был
+      if (order.tableId && order.tableId !== dto.tableId) {
+        await this.releaseTable(order.tableId, order.id);
+      }
+      
+      updateData.table = { connect: { id: dto.tableId } };
+      updateData.type = 'DINE_IN'; // Автоматически меняем тип на "в зале"
+    }
+  }
+
     if (dto.customerId !== undefined) {
       if (dto.customerId) {
         const customerExists = await this.prisma.customer.count({
@@ -1830,7 +1943,16 @@ export class OrderService {
               }
             }
           }
-        }
+        },
+         table: {
+      include: {
+        hall: {
+          include: {
+            restaurant: true,
+          },
+        },
+        },
+      },
       },
     });
 
@@ -3386,6 +3508,21 @@ export class OrderService {
         isPrecheck: order.isPrecheck,
         isRefund: order.isRefund,
       },
+      table: order.table ? {
+      id: order.table.id,
+      name: order.table.name,
+      seats: order.table.seats,
+      status: order.table.status,
+      hall: order.table.hall ? {
+        id: order.table.hall.id,
+        title: order.table.hall.title,
+      } : null,
+      tags: order.table.tags?.map((tt: any) => ({
+        id: tt.tag.id,
+        name: tt.tag.name,
+        color: tt.tag.color,
+      })) || [],
+    } : null,
     };
   }
 }

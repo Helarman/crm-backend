@@ -25,6 +25,7 @@ import { ScheduleModule } from '@nestjs/schedule'
 import { PaymentIntegrationModule } from './payment-integration/payment-integration.module';
 import { OrderAdditiveModule } from './order-additive/order-additive.module';
 import { TablesModule } from './tables/tables.module';
+import { ReservationsModule } from './reservation/reservations.module';
 
 @Module({
 	imports: [
@@ -53,7 +54,8 @@ import { TablesModule } from './tables/tables.module';
 		OrderLogModule,
 		PaymentIntegrationModule,
 		TablesModule,
-		RestaurantModule
+		ReservationsModule
+
 	]
 })
 export class AppModule {}

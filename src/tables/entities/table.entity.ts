@@ -73,9 +73,6 @@ export class Table {
   @ApiProperty({ description: 'ID родительского стола', required: false })
   parentTableId?: string;
 
-  @ApiProperty({ description: 'ID текущего заказа', required: false })
-  currentOrderId?: string;
-
   @ApiProperty({ description: 'Дата создания' })
   createdAt: Date;
 

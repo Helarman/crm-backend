@@ -125,7 +125,6 @@ export class ReservationsService {
     Стол: ${table.name}. Количество персон: ${reservation.numberOfPeople}.`;
 
     console.log(`SMS to ${reservation.phone}: ${message}`);
-    // В реальном приложении здесь будет интеграция с SMS-сервисом
     return true;
   }
 

@@ -84,6 +84,14 @@ export class CreateRestaurantDto {
   @IsBoolean()
   useWarehouse?: boolean;
 
+   @ApiProperty({ 
+    description: 'Использовать систему бронирования', 
+    required: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  useReservation?: boolean;
+  
   @ApiProperty({
     type: String,
     example: '1970-01-01T23:59:00.000Z',

@@ -53,6 +53,16 @@ export class OrderAdditiveDto {
 }
 
 export class CreateOrderDto {
+  @ApiProperty({ description: 'ID стола', required: false })
+  @IsString()
+  @IsOptional()
+  tableId?: string;
+
+  @ApiProperty({ description: 'Номер стола (для обратной совместимости)', required: false })
+  @IsString()
+  @IsOptional()
+  tableNumber?: string;
+
   @ApiProperty({ required: false })
   customerId?: string;
 
@@ -94,9 +104,6 @@ export class CreateOrderDto {
     title: string;
     price: number;
   };
-
-  @ApiProperty({ required: false })
-  tableNumber?: string;
 
   @ApiProperty({ required: false })
   numberOfPeople?: string;

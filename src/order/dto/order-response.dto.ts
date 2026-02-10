@@ -14,6 +14,7 @@ export class OrderResponse {
   comment?: string;
   discountAmount: number;
   bonusPointsUsed: number;
+  table?: any;
   phone?: string
   customer?: {
     id: string;

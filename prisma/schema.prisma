@@ -170,8 +170,9 @@ model Restaurant {
 
   personalDiscounts PersonalDiscount[]
 
-  workshops    RestaurantWorkshop[]
-  useWarehouse Boolean              @default(false) @map("use_warehouse")
+  workshops      RestaurantWorkshop[]
+  useReservation Boolean              @default(false) @map("use_reservation")
+  useWarehouse   Boolean              @default(false) @map("use_warehouse")
 
   mondayOpen      DateTime? @map("monday_open")
   mondayClose     DateTime? @map("monday_close")
@@ -455,23 +456,25 @@ model CustomerBonusBalance {
 }
 
 model Order {
-  id             String          @id @default(cuid())
-  source         OrderSource     @default(PANEL)
-  number         String          @unique @map("order_number")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  status         EnumOrderStatus @default(CREATED)
-  type           EnumOrderType   @default(DINE_IN)
-  scheduledAt    DateTime?       @map("scheduled_at")
-  tableNumber    String?
-  customer       Customer?       @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
-  customerId     String?         @map("customer_id")
+  id          String          @id @default(cuid())
+  source      OrderSource     @default(PANEL)
+  number      String          @unique @map("order_number")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  status      EnumOrderStatus @default(CREATED)
+  type        EnumOrderType   @default(DINE_IN)
+  scheduledAt DateTime?       @map("scheduled_at")
+  tableNumber String?
+  table       Table?          @relation(fields: [tableId], references: [id])
+  tableId     String?         @map("table_id")
+  customer       Customer?  @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
+  customerId     String?    @map("customer_id")
   numberOfPeople String?
-  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
-  restaurantId   String          @map("restaurant_id")
-  phone          String?         @map("phone")
-  shift          Shift?          @relation(fields: [shiftId], references: [id], name: "OrderToShift")
-  shiftId        String?         @map("shift_id")
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
+  restaurantId   String     @map("restaurant_id")
+  phone          String?    @map("phone")
+  shift          Shift?     @relation(fields: [shiftId], references: [id], name: "OrderToShift")
+  shiftId        String?    @map("shift_id")
 
   items   OrderItem[] @relation("OrderToOrderItem")
   payment Payment?    @relation("OrderToPayment")
@@ -1380,6 +1383,7 @@ model Table {
   tags          TableTag[]
   TableTableTag TableTableTag[]
   Reservation   Reservation[]
+  Order         Order[]
 
   @@map("tables")
 }

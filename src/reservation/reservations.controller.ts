@@ -30,8 +30,8 @@ export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Создать новое бронирование' })
   @ApiResponse({ status: 201, description: 'Бронирование успешно создано' })
   @ApiResponse({ status: 400, description: 'Неверные данные или стол занят' })
@@ -41,16 +41,15 @@ export class ReservationsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
   @ApiOperation({ summary: 'Получить список бронирований с фильтрацией' })
   getReservations(@Query() query: ReservationQueryDto) {
     return this.reservationsService.getReservations(query);
   }
 
   @Get('upcoming/:restaurantId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить предстоящие бронирования ресторана' })
   @ApiQuery({ name: 'hours', required: false, type: Number, description: 'Количество часов вперед (по умолчанию 24)' })
   getUpcomingReservations(
@@ -61,8 +60,8 @@ export class ReservationsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить бронирование по ID' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
   getReservationById(@Param('id') id: string) {
@@ -70,8 +69,8 @@ export class ReservationsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Обновить бронирование' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
   updateReservation(
@@ -83,8 +82,8 @@ export class ReservationsController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Отменить бронирование' })
   @ApiResponse({ status: 200, description: 'Бронирование успешно отменено' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
@@ -94,8 +93,8 @@ export class ReservationsController {
 
   @Post(':id/arrived')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Отметить клиента как прибывшего' })
   @ApiResponse({ status: 200, description: 'Статус успешно обновлен' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
@@ -105,8 +104,8 @@ export class ReservationsController {
 
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Завершить бронирование (клиент ушел)' })
   @ApiResponse({ status: 200, description: 'Бронирование завершено' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
@@ -116,8 +115,8 @@ export class ReservationsController {
 
   @Post(':id/no-show')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Отметить клиента как неявившегося' })
   @ApiResponse({ status: 200, description: 'Статус успешно обновлен' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
@@ -127,8 +126,8 @@ export class ReservationsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Удалить бронирование' })
   @ApiResponse({ status: 404, description: 'Бронирование не найдено' })
   @ApiResponse({ status: 400, description: 'Нельзя удалить активное бронирование' })
@@ -137,8 +136,8 @@ export class ReservationsController {
   }
 
   @Get('statistics/restaurant/:restaurantId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить статистику бронирований ресторана' })
   @ApiQuery({ name: 'startDate', required: false, type: Date })
   @ApiQuery({ name: 'endDate', required: false, type: Date })
@@ -150,8 +149,8 @@ export class ReservationsController {
     return this.reservationsService.getReservationStatistics(restaurantId, startDate, endDate);
   }
     @Get('table/:tableId')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить все бронирования стола' })
   @ApiQuery({ name: 'status', required: false, enum: ['CONFIRMED', 'PENDING', 'ARRIVED', 'CANCELLED', 'NO_SHOW', 'COMPLETED'] })
   @ApiQuery({ name: 'startDate', required: false, type: Date })
@@ -167,8 +166,8 @@ export class ReservationsController {
   }
 
   @Get('table/:tableId/current')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить текущее бронирование стола (ближайшее ±2 часа)' })
   @ApiResponse({ status: 200, description: 'Текущее бронирование' })
   @ApiResponse({ status: 204, description: 'Нет текущих бронирований' })
@@ -181,8 +180,8 @@ export class ReservationsController {
   }
 
   @Get('table/:tableId/upcoming')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить предстоящие бронирования стола' })
   @ApiQuery({ name: 'hours', required: false, type: Number, description: 'Количество часов вперед (по умолчанию 24)' })
   getUpcomingReservationsByTable(
@@ -193,8 +192,8 @@ export class ReservationsController {
   }
 
   @Get('table/:tableId/history')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  
+  
   @ApiOperation({ summary: 'Получить историю бронирований стола' })
   @ApiQuery({ name: 'days', required: false, type: Number, description: 'Количество дней истории (по умолчанию 30)' })
   getTableReservationHistory(

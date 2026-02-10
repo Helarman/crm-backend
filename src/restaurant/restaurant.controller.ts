@@ -29,6 +29,7 @@ import {
   import { AddProductDto } from './dto/add-product.dto';
   import { CreateRestaurantDto } from './dto/create-restaurant.dto';
   import { RestaurantService } from './restaurant.service';
+import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
   
   @ApiTags('Рестораны')
   @ApiBearerAuth()
@@ -62,13 +63,13 @@ import {
 	@Auth()
 	@ApiOperation({ summary: 'Обновить ресторан' })
 	@ApiParam({ name: 'id', description: 'ID ресторана' })
-	@ApiBody({ type: CreateRestaurantDto })
+	@ApiBody({ type: UpdateRestaurantDto  })
 	@ApiOkResponse({ description: 'Ресторан успешно обновлен' })
 	@ApiNotFoundResponse({ description: 'Ресторан не найден' })
 	@ApiBadRequestResponse({ description: 'Некорректные данные' })
 	async update(
 	  @Param('id') restaurantId: string,
-	  @Body() dto: CreateRestaurantDto
+	  @Body() dto: UpdateRestaurantDto 
 	) {
 	  return this.restaurantService.update(restaurantId, dto);
 	}

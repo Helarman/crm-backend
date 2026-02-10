@@ -50,6 +50,14 @@ export class UpdateRestaurantDto {
   @IsBoolean()
   useWarehouse?: boolean;
 
+  @ApiProperty({ 
+    description: 'Использовать систему бронирования', 
+    required: false 
+  })
+  @IsOptional()
+  @IsBoolean()
+  useReservation?: boolean;
+
   @ApiProperty({
     description: 'Время закрытия смены',
     required: false,

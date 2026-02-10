@@ -550,12 +550,6 @@ async saveHallLayout(id: string, layout: {
 
     const updateData: any = { status };
 
-    if (orderId) {
-      updateData.currentOrderId = orderId;
-    } else if (status !== TableStatus.OCCUPIED) {
-      updateData.currentOrderId = null;
-    }
-
     return this.prisma.table.update({
       where: { id },
       data: updateData,

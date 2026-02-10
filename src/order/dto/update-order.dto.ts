@@ -3,6 +3,11 @@ import { EnumOrderType } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateOrderDto {
+  @ApiProperty({ description: 'ID стола (null чтобы отвязать)', required: false })
+  @IsString()
+  @IsOptional()
+  tableId?: string | null;
+  
   @IsOptional()
   @IsEnum(EnumOrderType)
   type?: EnumOrderType;
