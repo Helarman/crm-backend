@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsPhoneNumber, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { EnumUserRoles } from '@prisma/client';
 
@@ -12,6 +12,16 @@ export class AuthDto {
   @IsString()
   name: string;
 
+    @ApiProperty({
+    example: '+79001234567',
+    description: 'Номер телефона',
+    required: false
+  })
+  @IsOptional()
+  @IsString({ message: 'Телефон должен быть строкой' })
+  @IsPhoneNumber('RU', { message: 'Неверный формат номера телефона' })
+  phone?: string;
+  
   @ApiProperty({
     example: 'user@example.com',
     description: 'Электронная почта',

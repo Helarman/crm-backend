@@ -28,6 +28,21 @@ export class UserResponseDto implements Omit<User, 'password'> {
   email: string;
 
   @ApiProperty({
+    example: false,
+    description: 'Флаг блокировки пользователя',
+    default: false,
+  })
+
+  isBlocked: boolean;
+    @ApiProperty({
+    example: '+79001234567',
+    description: 'Номер телефона пользователя',
+    required: false,
+    nullable: true,
+  })
+  phone: string | null;
+
+  @ApiProperty({
     example: 'Иван Иванов',
     description: 'Имя пользователя',
     default: 'Не указано',

@@ -15,12 +15,14 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   email    String  @unique
+  phone    String? @unique 
   password String?
 
   name    String @default("Не указано")
-  picture String @default("/uploads/no-user-image.png")
+  picture String @default("/")
 
   role          EnumUserRoles          @default(SUPERVISOR)
+  isBlocked     Boolean                @default(false) 
   restaurant    Restaurant[]           @relation("RestaurantToUser")
   shifts        UserShift[]            @relation("UserToUserShift")
   assignedItems OrderItem[]            @relation("OrderItemToUser")

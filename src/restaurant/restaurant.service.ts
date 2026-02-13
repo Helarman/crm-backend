@@ -48,6 +48,7 @@ export class RestaurantService {
     });
 
     if (!restaurant) throw new NotFoundException('Ресторан не найден');
+
     return restaurant;
   }
   async create(dto: CreateRestaurantDto) {

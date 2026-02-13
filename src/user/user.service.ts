@@ -52,9 +52,11 @@ export class UserService {
         name: true,
         password: true,
         picture: true,
+        phone: true,
         role: true,
         createdAt: true,
         updatedAt: true,
+         isBlocked: true, 
       },
     });
   }
@@ -69,19 +71,26 @@ export class UserService {
     });
   }
 
-  async create(dto: AuthDto): Promise<PrismaUser> {
-    const newUser = this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: dto.password,
-        name: dto.name,
-        role: dto.role ? dto.role : 'NONE'
-      },
-    
-    });
-    console.log(newUser)
-    return newUser
+ async create(dto: AuthDto): Promise<PrismaUser> {
+  const data: any = {
+    email: dto.email,
+    password: dto.password,
+    name: dto.name,
+    role: dto.role ? dto.role : 'SUPERVISOR',
+  };
+  
+  // Добавляем телефон, если он предоставлен
+  if (dto.phone) {
+    data.phone = dto.phone;
   }
+  
+  const newUser = await this.prisma.user.create({
+    data,
+  });
+  
+  this.logger.log(`User created: ${newUser.email} with phone: ${newUser.phone || 'not provided'}`);
+  return newUser;
+}
 
   async update(id: string, dto: Partial<PrismaUser>): Promise<PrismaUser> {
     return this.prisma.user.update({

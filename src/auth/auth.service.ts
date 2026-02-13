@@ -47,6 +47,10 @@ import {
 		if (!user) {
 			throw new NotFoundException('Пользователь не найден');
 		}
+ 		if (user.isBlocked) {
+            this.logger.warn(`Blocked user attempted login: ${user.email}`);
+            throw new UnauthorizedException('Учетная запись заблокирована');
+        }
 
 		const isPasswordValid = await argon2.verify(user.password, dto.password);
 		this.logger.log(`${user.password} dto.password`)
@@ -75,13 +79,22 @@ import {
     if (existingUser) {
       throw new BadRequestException('Пользователь с таким email уже существует');
     }
-
+   	if (dto.phone) {
+      const existingPhone = await this.prismaService.user.findUnique({
+        where: { phone: dto.phone }
+      });
+      
+      if (existingPhone) {
+        throw new BadRequestException('Пользователь с таким номером телефона уже существует');
+      }
+    }
     const hashedPassword = await argon2.hash(dto.password, this.hashOptions);
     const user = await this.userService.create({
       email: dto.email,
       password: hashedPassword,
 	  role: 'SUPERVISOR',
-      name: dto.name, // Добавляем поле name
+      name: dto.name, 
+	   phone: dto.phone,
     });
 
     const tokens = await this.generateTokens(user.id);
