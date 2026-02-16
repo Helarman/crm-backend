@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef,
 import { PrismaService } from '../prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponse } from './dto/order-response.dto';
-import { DiscountTargetType, EnumOrderItemStatus, EnumOrderStatus, EnumPaymentStatus, OrderAdditiveType } from '@prisma/client';
+import { DiscountTargetType, EnumOrderItemStatus, EnumOrderStatus, EnumPaymentMethod, EnumPaymentStatus, OrderAdditiveType } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderItemStatusDto } from './dto/update-order-item-status.dto';
 import { BulkUpdateOrderItemsStatusDto } from './dto/bulk-update-order-items-status.dto';
@@ -102,160 +102,165 @@ export class OrderService {
     return activeOrders.length === 0;
 }
 
-  async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
-    const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
-    if (dto.tableId) {
-      await this.validateAndAssignTable(dto.tableId, dto.restaurantId, null, dto.type);
-    }
+async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
+  const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
+  
+  if (dto.tableId) {
+    await this.validateAndAssignTable(dto.tableId, dto.restaurantId, null, dto.type);
+  }
 
-    const stopListProducts = this.checkStopList(products, productPrices);
-    if (stopListProducts.length > 0) {
-      throw new BadRequestException(
-        `Следующие продукты в стоп-листе: ${stopListProducts.join(', ')}`
-      );
-    }
-
-    const orderNumber = await this.generateOrderNumber(dto.restaurantId);
-
-    let deliveryPrice = 0;
-    if (dto.type === "DELIVERY" && dto.deliveryZone) {
-      deliveryPrice = dto.deliveryZone.price;
-    }
-
-
-    let orderAdditivesInfo: any[] = [];
-    const orderAdditivesData: any[] = [];
-
-    if (dto.orderAdditives?.length) {
-      const orderAdditives = await this.prisma.orderAdditive.findMany({
-        where: {
-          id: { in: dto.orderAdditives.map(oa => oa.orderAdditiveId) },
-          isActive: true,
-          orderTypes: { has: dto.type }
-        }
-      });
-
-      orderAdditivesInfo = dto.orderAdditives.map(oaDto => {
-        const additive = orderAdditives.find(a => a.id === oaDto.orderAdditiveId);
-        return {
-          additive,
-          quantity: oaDto.quantity || 1
-        };
-      });
-
-      // Заполняем orderAdditivesData
-      for (const oaDto of dto.orderAdditives) {
-        const additive = orderAdditives.find(a => a.id === oaDto.orderAdditiveId);
-        if (additive) {
-          orderAdditivesData.push({
-            orderAdditiveId: additive.id,
-            quantity: oaDto.quantity || 1,
-            price: additive.price
-          });
-        }
-      }
-    }
-
-    const baseAmount = await this.calculateOrderTotal(
-      dto.items,
-      additives,
-      productPrices,
-      orderAdditivesInfo,
-      dto.type,
-      dto.numberOfPeople
+  const stopListProducts = this.checkStopList(products, productPrices);
+  if (stopListProducts.length > 0) {
+    throw new BadRequestException(
+      `Следующие продукты в стоп-листе: ${stopListProducts.join(', ')}`
     );
+  }
 
-    const surchargesAmount = this.calculateSurchargesTotal(dto.surcharges || [], baseAmount + deliveryPrice);
+  const orderNumber = await this.generateOrderNumber(dto.restaurantId);
 
-    const totalAmount = baseAmount + deliveryPrice + surchargesAmount;
+  let deliveryPrice = 0;
+  if (dto.type === "DELIVERY" && dto.deliveryZone) {
+    deliveryPrice = dto.deliveryZone.price;
+  }
 
-    let personalDiscountAmount = 0;
-    let personalDiscountId: string | null = null;
+  let orderAdditivesInfo: any[] = [];
+  const orderAdditivesData: any[] = [];
 
-    if (dto.customerId && dto.restaurantId) {
-      const personalDiscount = await this.loyaltyService.getPersonalDiscount(
-        dto.customerId,
-        dto.restaurantId
-      );
-
-      if (personalDiscount.discount > 0 && personalDiscount.isActive) {
-        personalDiscountAmount = Math.floor(totalAmount * personalDiscount.discount / 100);
-        personalDiscountId = personalDiscount.id;
+  if (dto.orderAdditives?.length) {
+    const orderAdditives = await this.prisma.orderAdditive.findMany({
+      where: {
+        id: { in: dto.orderAdditives.map(oa => oa.orderAdditiveId) },
+        isActive: true,
+        orderTypes: { has: dto.type }
       }
-    }
-
-    const finalTotalAmount = totalAmount - personalDiscountAmount;
-
-    const orderData: any = {
-      status: EnumOrderStatus.CREATED,
-      source: dto.source,
-      number: orderNumber,
-      customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
-      phone: dto.phone,
-      restaurant: { connect: { id: dto.restaurantId } },
-      shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
-      type: dto.type,
-      scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
-      totalAmount: finalTotalAmount,
-      discountAmount: personalDiscountAmount,
-      hasDiscount: personalDiscountAmount > 0,
-      numberOfPeople: dto.numberOfPeople.toString(),
-      comment: dto.comment,
-      tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
-      deliveryAddress: dto.deliveryAddress,
-      deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
-      deliveryNotes: dto.deliveryNotes,
-      items: {
-        create: dto.items.map(item => ({
-          product: { connect: { id: item.productId } },
-          quantity: item.quantity,
-          price: productPrices.find(pp => pp.productId === item.productId)?.price || 0,
-          comment: item.comment,
-          status: EnumOrderItemStatus.CREATED,
-          additives: item.additiveIds
-            ? { connect: item.additiveIds.map(id => ({ id })) }
-            : undefined,
-        })),
-      },
-      surcharges: dto.surcharges?.length ? {
-        create: dto.surcharges.map(surcharge => ({
-          surcharge: { connect: { id: surcharge.surchargeId } },
-          amount: surcharge.amount,
-          description: surcharge.description,
-        })),
-      } : undefined,
-    };
-
-    // Добавляем модификаторы заказа, если они есть
-    if (orderAdditivesData.length > 0) {
-      orderData.orderOrderAdditives  = {
-        create: orderAdditivesData.map(data => ({
-          orderAdditive: { connect: { id: data.orderAdditiveId } },
-          quantity: data.quantity,
-          price: data.price,
-        })),
-      };
-    }
-
-    // Добавляем поле только если оно не null
-    if (personalDiscountId !== null) {
-      orderData.personalDiscountId = personalDiscountId;
-    }
-
-    const order = await this.prisma.order.create({
-      data: orderData,
-      include: this.getOrderInclude(),
     });
 
-    const response = this.mapToResponse(order);
+    orderAdditivesInfo = dto.orderAdditives.map(oaDto => {
+      const additive = orderAdditives.find(a => a.id === oaDto.orderAdditiveId);
+      return {
+        additive,
+        quantity: oaDto.quantity || 1
+      };
+    });
 
-    // Отправляем WebSocket уведомление о новом заказе
-    setTimeout(async () => {
-      await this.orderGateway.notifyNewOrder(response);
-    }, 100);
-
-    return response;
+    for (const oaDto of dto.orderAdditives) {
+      const additive = orderAdditives.find(a => a.id === oaDto.orderAdditiveId);
+      if (additive) {
+        orderAdditivesData.push({
+          orderAdditiveId: additive.id,
+          quantity: oaDto.quantity || 1,
+          price: additive.price
+        });
+      }
+    }
   }
+
+  const baseAmount = await this.calculateOrderTotal(
+    dto.items,
+    additives,
+    productPrices,
+    orderAdditivesInfo,
+    dto.type,
+    dto.numberOfPeople
+  );
+
+  const surchargesAmount = this.calculateSurchargesTotal(dto.surcharges || [], baseAmount + deliveryPrice);
+  const totalAmount = baseAmount + deliveryPrice + surchargesAmount;
+
+  let personalDiscountAmount = 0;
+  let personalDiscountId: string | null = null;
+
+  if (dto.customerId && dto.restaurantId) {
+    const personalDiscount = await this.loyaltyService.getPersonalDiscount(
+      dto.customerId,
+      dto.restaurantId
+    );
+
+    if (personalDiscount.discount > 0 && personalDiscount.isActive) {
+      personalDiscountAmount = Math.floor(totalAmount * personalDiscount.discount / 100);
+      personalDiscountId = personalDiscount.id;
+    }
+  }
+
+  const finalTotalAmount = totalAmount - personalDiscountAmount;
+
+  // Создаем заказ и платеж в одной операции
+  const orderData: any = {
+    status: EnumOrderStatus.CREATED,
+    source: dto.source,
+    number: orderNumber,
+    customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
+    phone: dto.phone,
+    restaurant: { connect: { id: dto.restaurantId } },
+    shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
+    type: dto.type,
+    scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
+    totalAmount: finalTotalAmount,
+    discountAmount: personalDiscountAmount,
+    hasDiscount: personalDiscountAmount > 0,
+    numberOfPeople: dto.numberOfPeople.toString(),
+    comment: dto.comment,
+    tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
+    deliveryAddress: dto.deliveryAddress,
+    deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
+    deliveryNotes: dto.deliveryNotes,
+    items: {
+      create: dto.items.map(item => ({
+        product: { connect: { id: item.productId } },
+        quantity: item.quantity,
+        price: productPrices.find(pp => pp.productId === item.productId)?.price || 0,
+        comment: item.comment,
+        status: EnumOrderItemStatus.CREATED,
+        additives: item.additiveIds
+          ? { connect: item.additiveIds.map(id => ({ id })) }
+          : undefined,
+      })),
+    },
+    surcharges: dto.surcharges?.length ? {
+      create: dto.surcharges.map(surcharge => ({
+        surcharge: { connect: { id: surcharge.surchargeId } },
+        amount: surcharge.amount,
+        description: surcharge.description,
+      })),
+    } : undefined,
+    // Создаем платеж прямо здесь
+    payment: {
+      create: {
+        amount: finalTotalAmount,
+        method: EnumPaymentMethod.CASH,
+        status: EnumPaymentStatus.PENDING,
+      },
+    },
+  };
+
+  // Добавляем модификаторы заказа, если они есть
+  if (orderAdditivesData.length > 0) {
+    orderData.orderOrderAdditives = {
+      create: orderAdditivesData.map(data => ({
+        orderAdditive: { connect: { id: data.orderAdditiveId } },
+        quantity: data.quantity,
+        price: data.price,
+      })),
+    };
+  }
+
+  if (personalDiscountId !== null) {
+    orderData.personalDiscountId = personalDiscountId;
+  }
+
+  const order = await this.prisma.order.create({
+    data: orderData,
+    include: this.getOrderInclude(),
+  });
+
+  const response = this.mapToResponse(order);
+
+  setTimeout(async () => {
+    await this.orderGateway.notifyNewOrder(response);
+  }, 100);
+
+  return response;
+}
 
   async addOrderAdditiveToOrder(
     orderId: string,
