@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Body, Query, BadRequestException, Logger,Delete} from '@nestjs/common';
+import { Controller, Get, Param, Patch, Body, Query, BadRequestException, Logger, Delete } from '@nestjs/common';
 import { 
   ApiTags, 
   ApiOperation, 
@@ -7,14 +7,17 @@ import {
   ApiOkResponse,
   ApiUnauthorizedResponse,
   ApiParam,
-  ApiNotFoundResponse
+  ApiNotFoundResponse,
+  ApiBody
 } from '@nestjs/swagger';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { CurrentUser } from './decorators/user.decorator';
 import { UserService } from './user.service';
 import { EnumUserRoles } from '@prisma/client';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { $Enums } from '@prisma/client';
+import { ToggleBlockDto } from './dto/toggle-block.dto';
 
 @ApiTags('Пользователи')
 @ApiBearerAuth()
@@ -75,6 +78,21 @@ export class UserController {
     return this.userService.delete(id);
   }
 
+  @Auth()
+  @Patch(':id')
+  @ApiOperation({ summary: 'Обновить данные пользователя' })
+  @ApiParam({ name: 'id', description: 'ID пользователя' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiOkResponse({ description: 'Данные пользователя успешно обновлены' })
+  @ApiNotFoundResponse({ description: 'Пользователь не найден' })
+  @ApiUnauthorizedResponse({ description: 'Пользователь не авторизован' })
+  @ApiResponse({ status: 409, description: 'Email уже занят' })
+  async updateUser(
+    @Param('id') id: string, 
+    @Body() dto: UpdateUserDto
+  ) {
+    return this.userService.update(id, dto);
+  }
 
   @Auth()
   @Patch(':id/role')
@@ -87,5 +105,23 @@ export class UserController {
   async updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.userService.updateRole(id, dto.role);
   }
-  
+
+  @Auth()
+  @Patch(':id/toggle-block')
+  @ApiOperation({ 
+    summary: 'Заблокировать/разблокировать пользователя',
+    description: 'Изменяет статус блокировки пользователя (true - заблокирован, false - разблокирован)'
+  })
+  @ApiParam({ name: 'id', description: 'ID пользователя' })
+  @ApiBody({ type: ToggleBlockDto })
+  @ApiOkResponse({ description: 'Статус блокировки пользователя успешно изменен' })
+  @ApiNotFoundResponse({ description: 'Пользователь не найден' })
+  @ApiUnauthorizedResponse({ description: 'Пользователь не авторизован' })
+  @ApiResponse({ status: 403, description: 'Недостаточно прав' })
+  async toggleBlock(
+    @Param('id') id: string, 
+    @Body() dto: ToggleBlockDto
+  ) {
+    return this.userService.toggleBlock(id, dto.isBlocked);
+  }
 }

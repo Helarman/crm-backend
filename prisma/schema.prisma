@@ -21,7 +21,7 @@ model User {
   name    String @default("Не указано")
   picture String @default("/")
 
-  role          EnumUserRoles          @default(SUPERVISOR)
+  role          EnumUserRoles          @default(NONE)
   isBlocked     Boolean                @default(false) 
   restaurant    Restaurant[]           @relation("RestaurantToUser")
   shifts        UserShift[]            @relation("UserToUserShift")
@@ -488,6 +488,11 @@ model Order {
   deliveryAddress String?   @map("delivery_address")
   deliveryTime    DateTime? @map("delivery_time")
   deliveryNotes   String?   @map("delivery_notes")
+  deliveryEntrance  String?   @map("delivery_entrance")     // Подъезд
+  deliveryIntercom  String?   @map("delivery_intercom")     // Домофон
+  deliveryFloor     String?   @map("delivery_floor")        // Этаж
+  deliveryApartment String?   @map("delivery_apartment")    // Квартира/офис
+  deliveryCourierComment String? @map("delivery_courier_comment") // Комментарий для курьера
 
   surcharges OrderSurcharge[] @relation("OrderToSurcharge")
 
@@ -511,7 +516,7 @@ model Order {
   personalDiscountId  String?              @map("personal_discount_id")
   personalDiscount    PersonalDiscount?    @relation(fields: [personalDiscountId], references: [id])
   orderOrderAdditives OrderOrderAdditive[]
-
+  customerName   String?    @map("customer_name")
   @@map("orders")
 }
 

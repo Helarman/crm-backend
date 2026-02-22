@@ -1,5 +1,21 @@
 import { EnumOrderStatus, EnumPaymentStatus, EnumPaymentMethod, EnumOrderType, OrderAdditiveType } from '@prisma/client';
 
+export class DeliveryResponse {
+  address: string;
+  time?: Date;
+  notes?: string;
+  entrance?: string;        // Подъезд
+  intercom?: string;        // Домофон
+  floor?: string;           // Этаж
+  apartment?: string;       // Квартира/офис
+  courierComment?: string;  // Комментарий для курьера
+  startedAt?: Date;       
+  courier?: { 
+    id: string;
+    name: string;
+  };
+}
+
 export class OrderResponse {
   orderAdditives?: OrderAdditiveResponse[];
   source?: string;
@@ -15,13 +31,17 @@ export class OrderResponse {
   discountAmount: number;
   bonusPointsUsed: number;
   table?: any;
-  phone?: string
+  phone?: string;
+  
+  customerName?: string;   
+  
   customer?: {
     id: string;
     name: string;
     phone: string;
     email?: string;
   };
+  
   discountInfo?: {
     appliedDiscounts: Array<{
       id: string;
@@ -31,10 +51,12 @@ export class OrderResponse {
     }>;
     totalDiscount: number;
   };
+  
   bonusInfo?: {
     pointsUsed: number;
-    pointsValue: number; // в рублях
+    pointsValue: number; 
   };
+  
   restaurant: {
     id: string;
     name: string;
@@ -49,8 +71,10 @@ export class OrderResponse {
       };
     };
   };
+  
   personalDiscount?: any;
   restaurantId: string;
+  
   items: Array<{
     id: string;
     status: string;
@@ -101,7 +125,9 @@ export class OrderResponse {
     }>;
     totalPrice: number;
   }>;
+  
   numberOfPeople?: string;
+  
   payment?: {
     id: string;
     method: EnumPaymentMethod;
@@ -109,19 +135,11 @@ export class OrderResponse {
     status: EnumPaymentStatus;
     externalId?: string;
   };
-   delivery?: {
-    address: string;
-    time?: Date;
-    notes?: string;
-    startedAt?: Date;       
-    courier?: { 
-      id: string;
-      name: string;
-    };
-  };
+  
   totalPrice: number;
   totalAmount: number;
   totalItems: number;
+  
   surcharges?: Array<{
     id: string;
     surchargeId: string;
@@ -130,6 +148,7 @@ export class OrderResponse {
     type: 'FIXED' | 'PERCENTAGE';
     description?: string;
   }>;
+  
   attentionFlags: {
     isReordered: boolean;
     hasDiscount: boolean;
@@ -137,9 +156,17 @@ export class OrderResponse {
     isPrecheck: boolean;
     isRefund: boolean;
   };
+  deliveryAddress?: string;
+  deliveryTime?: Date;
+  deliveryNotes?: string;
+  deliveryEntrance?: string;
+  deliveryIntercom?: string;
+  deliveryFloor?: string;
+  deliveryApartment?: string;
+  deliveryCourierComment?: string;
   restaurnat?: any
-}
 
+}
 
 export class OrderAdditiveResponse {
   id: string;

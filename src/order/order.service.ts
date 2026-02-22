@@ -104,7 +104,11 @@ export class OrderService {
 
 async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
   const { restaurant, products, additives, productPrices } = await this.getOrderData(dto);
-  
+  console.log(dto)
+   const deliveryTime = dto.deliveryTime 
+    ? new Date(dto.deliveryTime).toISOString() 
+    : undefined;
+
   if (dto.tableId) {
     await this.validateAndAssignTable(dto.tableId, dto.restaurantId, null, dto.type);
   }
@@ -190,6 +194,7 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     source: dto.source,
     number: orderNumber,
     customer: dto.customerId ? { connect: { id: dto.customerId } } : undefined,
+    customerName: dto.customerName,
     phone: dto.phone,
     restaurant: { connect: { id: dto.restaurantId } },
     shift: dto.shiftId ? { connect: { id: dto.shiftId } } : undefined,
@@ -202,8 +207,13 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     comment: dto.comment,
     tableNumber: dto.tableNumber ? dto.tableNumber.toString() : undefined,
     deliveryAddress: dto.deliveryAddress,
-    deliveryTime: dto.deliveryTime ? dto.deliveryTime : undefined,
+    deliveryTime: deliveryTime,  
     deliveryNotes: dto.deliveryNotes,
+    deliveryEntrance: dto.deliveryEntrance,
+    deliveryIntercom: dto.deliveryIntercom,
+    deliveryFloor: dto.deliveryFloor,
+    deliveryApartment: dto.deliveryApartment,
+    deliveryCourierComment: dto.deliveryCourierComment,
     items: {
       create: dto.items.map(item => ({
         product: { connect: { id: item.productId } },
@@ -439,6 +449,7 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
 
     return orders.map(order => {
       const response = this.mapToResponse(order);
+    
       return {
         ...response,
         restaurant: {
@@ -1889,9 +1900,7 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
       tableNumber: dto.tableNumber?.toString(),
       comment: dto.comment,
       phone: dto.phone,
-      deliveryAddress: dto.deliveryAddress,
-      deliveryTime: dto.deliveryTime ? timeStringToISODate(dto.deliveryTime) : undefined,
-      deliveryNotes: dto.deliveryNotes,
+      customerName: dto.customerName,
       scheduledAt: dto.scheduledAt ? `${dto.scheduledAt}:00.000Z` : undefined,
     };
 
@@ -3402,10 +3411,19 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
       status: order.status,
       source: order.source,
       type: order.type,
+      deliveryAddress: order.deliveryAddress,
+      deliveryTime: order.deliveryTime,
+      deliveryNotes: order.deliveryNotes,
+      deliveryEntrance: order.deliveryEntrance,
+      deliveryIntercom: order.deliveryIntercom,
+      deliveryFloor: order.deliveryFloor,
+      deliveryApartment: order.deliveryApartment,
+      deliveryCourierComment: order.deliveryCourierComment,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       phone: order.phone,
       scheduledAt: order.scheduledAt,
+      customerName: order.customerName,
       comment: order.comment,
       tableNumber: order.tableNumber,
       numberOfPeople: order.numberOfPeople,
@@ -3487,16 +3505,6 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
         amount: order.payment.amount,
         status: order.payment.status,
         externalId: order.payment.externalId,
-      } : undefined,
-      delivery: order.deliveryAddress ? {
-        address: order.deliveryAddress,
-        time: order.deliveryTime,
-        notes: order.deliveryNotes,
-        startedAt: order.deliveryStartedAt,
-        courier: order.deliveryCourier ? {
-          id: order.deliveryCourier.id,
-          name: order.deliveryCourier.name
-        } : undefined,
       } : undefined,
       surcharges: order.surcharges?.map(s => ({
         id: s.id,

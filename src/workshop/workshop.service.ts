@@ -200,23 +200,7 @@ export class WorkshopService {
       throw new NotFoundException('Цех не найден');
     }
 
-    // Проверяем, принадлежат ли пользователи сети цеха
-    if (workshop.networkId) {
-      const users = await this.prisma.user.findMany({
-        where: {
-          id: { in: userIds },
-          networks: {
-            some: {
-              id: workshop.networkId
-            }
-          }
-        },
-      });
 
-      if (users.length !== userIds.length) {
-        throw new NotFoundException('Некоторые пользователи не найдены или не принадлежат сети цеха');
-      }
-    }
 
     await this.prisma.userWorkshop.createMany({
       data: userIds.map(userId => ({
