@@ -24,6 +24,8 @@ export class OrderItemDto {
   @IsArray()
   @IsString({ each: true })
   additiveIds?: string[];
+
+   parentComboId?: string;
 }
 
 export class PaymentDto {

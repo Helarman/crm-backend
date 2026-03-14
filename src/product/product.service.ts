@@ -901,6 +901,22 @@ async getDeletedProductsByNetwork(networkId: string) {
           }
         },
         network: true,
+        comboItems: {
+        include: {
+          products: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  title: true,
+                  price: true,
+                  images: true
+                }
+              }
+            }
+          }
+        }
+      }
       },
     });
 
@@ -908,16 +924,14 @@ async getDeletedProductsByNetwork(networkId: string) {
     return product;
   }
 
-  // Мягкое удаление (soft delete)
-  async delete(id: string) {
-    const product = await this.getById(id);
-    
-    // Вместо удаления устанавливаем isUsed = false
-    return this.prisma.product.update({
-      where: { id },
-      data: { isUsed: false },
-    });
-  }
+async delete(id: string) {
+  const product = await this.getById(id);
+  
+  return this.prisma.product.update({
+    where: { id },
+    data: { isUsed: false },
+  });
+}
 
   
 
@@ -1057,7 +1071,7 @@ async deleteMultiple(productIds: string[]) {
     throw new BadRequestException('Не указаны ID продуктов для удаления');
   }
 
-  // Используем один updateMany вместо множества update
+
   const result = await this.prisma.product.updateMany({
     where: {
       id: { in: productIds },
@@ -1368,7 +1382,19 @@ async updateIngredientsForMultiple(
     });
   }
 
-  // Окончательное удаление (hard delete) - только для администратора
+  async canDeleteProduct(productId: string): Promise<boolean> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      
+    });
+
+    if (!product) {
+      throw new NotFoundException('Продукт не найден');
+    }
+
+    return true;
+  }
+
   async hardDelete(id: string) {
     const product = await this.prisma.product.findUnique({
       where: { id }

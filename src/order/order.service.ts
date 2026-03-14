@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, OrderItemDto } from './dto/create-order.dto';
 import { OrderResponse } from './dto/order-response.dto';
 import { DiscountTargetType, EnumOrderItemStatus, EnumOrderStatus, EnumPaymentMethod, EnumPaymentStatus, OrderAdditiveType } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -188,6 +188,9 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
 
   const finalTotalAmount = totalAmount - personalDiscountAmount;
 
+  const regularItems = dto.items.filter(item => !item.parentComboId);
+  const comboItems = dto.items.filter(item => item.parentComboId);
+
   // Создаем заказ и платеж в одной операции
   const orderData: any = {
     status: EnumOrderStatus.CREATED,
@@ -214,13 +217,14 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     deliveryFloor: dto.deliveryFloor,
     deliveryApartment: dto.deliveryApartment,
     deliveryCourierComment: dto.deliveryCourierComment,
-    items: {
+     items: {
       create: dto.items.map(item => ({
         product: { connect: { id: item.productId } },
         quantity: item.quantity,
         price: productPrices.find(pp => pp.productId === item.productId)?.price || 0,
         comment: item.comment,
         status: EnumOrderItemStatus.CREATED,
+        parentCombo: item.parentComboId ? { connect: { id: item.parentComboId } } : undefined,
         additives: item.additiveIds
           ? { connect: item.additiveIds.map(id => ({ id })) }
           : undefined,
@@ -271,6 +275,8 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
 
   return response;
 }
+
+
 
   async addOrderAdditiveToOrder(
     orderId: string,
@@ -411,6 +417,7 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
 
     if (!order) throw new NotFoundException('Заказ не найден');
 
+    
     const response = this.mapToResponse(order);
     return {
       ...response,
@@ -882,61 +889,77 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
     };
   }
 
-  async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
-    console.log('1. Начало addItemToOrder');
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        restaurant: {
-          include: {
-            network: {
-              include: {
-                tenant: true
-              }
-            }
-          }
-        },
-        payment: true,
-        items: {
-          where: {
-            status: {
-              not: 'CANCELLED'
+async addItemToOrder(orderId: string, dto: AddItemToOrderDto): Promise<OrderResponse> {
+  console.log('1. Начало addItemToOrder');
+  console.log(dto)
+  
+  // Получаем заказ
+  const order = await this.prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      restaurant: {
+        include: {
+          network: {
+            include: {
+              tenant: true
             }
           }
         }
       },
-    });
-
-    if (!order || !order.restaurant) {
-      throw new NotFoundException('Заказ или ресторан не найден');
-    }
-
-    if (order.payment?.status === 'PAID') {
-      throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
-    }
-
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
-    });
-
-    if (!product) {
-      throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
-    }
-
-    const productInRestaurant = await this.prisma.product.count({
-      where: {
-        id: dto.productId,
-        restaurants: { some: { id: order.restaurant.id } }
+      payment: true,
+      items: {
+        where: {
+          status: {
+            not: 'CANCELLED'
+          }
+        }
       }
-    });
+    },
+  });
 
-    if (!productInRestaurant) {
-      throw new BadRequestException(
-        `Продукт "${product.title}" не доступен в ресторане "${order.restaurant.title}"`
-      );
+  if (!order || !order.restaurant) {
+    throw new NotFoundException('Заказ или ресторан не найден');
+  }
+
+  if (order.payment?.status === 'PAID') {
+    throw new BadRequestException('Нельзя добавить позицию в оплаченный заказ');
+  }
+
+  const product = await this.prisma.product.findUnique({
+    where: { id: dto.productId },
+  });
+
+  if (!product) {
+    throw new NotFoundException(`Продукт с ID ${dto.productId} не найден`);
+  }
+
+  const productInRestaurant = await this.prisma.product.count({
+    where: {
+      id: dto.productId,
+      restaurants: { some: { id: order.restaurant.id } }
     }
+  });
 
+  if (!productInRestaurant) {
+    throw new BadRequestException(
+      `Продукт "${product.title}" не доступен в ресторане "${order.restaurant.title}"`
+    );
+  }
+
+  // Определяем базовую цену продукта
+  let baseProductPrice: number;
+  
+  if (dto.price !== undefined) {
+    // Используем цену из DTO, если она указана
+    baseProductPrice = dto.price;
+    
+    // Проверяем, что цена не отрицательная
+    if (baseProductPrice < 0) {
+      throw new BadRequestException('Цена не может быть отрицательной');
+    }
+  } else {
+    // Используем стандартную логику получения цены из БД
     let productPrice = await this.prisma.restaurantProductPrice.findFirst({
       where: {
         productId: dto.productId,
@@ -961,53 +984,89 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
       );
     }
 
-    const additives = dto.additiveIds?.length
-      ? await this.prisma.additive.findMany({
+    baseProductPrice = productPrice.price;
+  }
+
+  // Получаем модификаторы
+  const additives = dto.additiveIds?.length
+    ? await this.prisma.additive.findMany({
         where: { id: { in: dto.additiveIds } }
       })
-      : [];
+    : [];
 
-    if (dto.additiveIds?.length && additives.length !== dto.additiveIds.length) {
-      const missingIds = dto.additiveIds.filter(id =>
-        !additives.some(a => a.id === id)
-      );
-      throw new NotFoundException(
-        `Не найдены Модификаторы с ID: ${missingIds.join(', ')}`
-      );
-    }
-
-    const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
-    const itemPrice = (productPrice.price + additivesPrice) * dto.quantity;
-
-    const hasConfirmedItems = order.items.some(item =>
-      item.status !== 'CREATED' && item.status !== 'CANCELLED'
+  if (dto.additiveIds?.length && additives.length !== dto.additiveIds.length) {
+    const missingIds = dto.additiveIds.filter(id =>
+      !additives.some(a => a.id === id)
     );
+    throw new NotFoundException(
+      `Не найдены модификаторы с ID: ${missingIds.join(', ')}`
+    );
+  }
 
+  // Проверяем, является ли добавляемый продукт комбо
+  if (product.isCombo && dto.parentComboId) {
+    throw new BadRequestException('Комбо не может быть дочерним элементом другого комбо');
+  }
 
-    try {
+  // Рассчитываем итоговую цену
+  const additivesPrice = additives.reduce((sum, a) => sum + a.price, 0);
+  const itemPrice = (baseProductPrice + additivesPrice) * dto.quantity;
+
+  const hasConfirmedItems = order.items.some(item =>
+    item.status !== 'CREATED' && item.status !== 'CANCELLED'
+  );
+
+  try {
+    // ИСПОЛЬЗУЕМ ТРАНЗАКЦИЮ ДЛЯ ГРУППИРОВКИ ОПЕРАЦИЙ
+    return await this.prisma.$transaction(async (prisma) => {
       if (hasConfirmedItems) {
-        await this.prisma.order.update({
+        await prisma.order.update({
           where: { id: orderId },
           data: { isReordered: true },
         });
       }
 
-      const newItem = await this.prisma.orderItem.create({
+      // Если указан parentOrderItemId, проверяем что он существует и принадлежит этому заказу
+      let parentOrderItem = null;
+      if (dto.parentOrderItemId) {
+        parentOrderItem = await prisma.orderItem.findFirst({
+          where: {
+            id: dto.parentOrderItemId,
+            orderId: orderId
+          }
+        });
+        
+        if (!parentOrderItem) {
+          throw new BadRequestException('Родительский элемент заказа не найден в этом заказе');
+        }
+      }
+
+      const newItem = await prisma.orderItem.create({
         data: {
           order: { connect: { id: orderId } },
           product: { connect: { id: dto.productId } },
           quantity: dto.quantity,
-          price: productPrice.price,
+          price: baseProductPrice, // Сохраняем цену (стандартную или кастомную)
           comment: dto.comment,
           status: 'CREATED',
           isReordered: hasConfirmedItems,
+          // Если указан parentComboId, связываем с родительским комбо (продуктом)
+          ...(dto.parentComboId && {
+            parentCombo: { connect: { id: dto.parentComboId } }
+          }),
+          // Если указан parentOrderItemId, связываем с родительским OrderItem
+          ...(dto.parentOrderItemId && {
+            parentOrderItem: { connect: { id: dto.parentOrderItemId } }
+          }),
           additives: dto.additiveIds?.length
             ? { connect: dto.additiveIds.map(id => ({ id })) }
             : undefined,
         },
       });
 
-      const updatedOrder = await this.prisma.order.update({
+      console.log('Item created with ID:', newItem.id);
+
+      const updatedOrder = await prisma.order.update({
         where: { id: orderId },
         data: {
           totalAmount: { increment: itemPrice },
@@ -1028,16 +1087,19 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
       });
 
       if (order.payment) {
-        await this.prisma.payment.update({
+        await prisma.payment.update({
           where: { id: order.payment.id },
           data: { amount: { increment: itemPrice } },
         });
       }
 
+      // ВАЖНО: Добавляем небольшую задержку перед возвратом результата
+      // чтобы убедиться, что все данные закоммичены
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       const response = this.mapToResponse(updatedOrder);
 
-      // WebSocket уведомление
+      // WebSocket уведомление (вне транзакции)
       setTimeout(async () => {
         await this.orderGateway.notifyOrderModified(response);
       }, 100);
@@ -1057,13 +1119,16 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
           } : undefined
         }
       };
+    }, {
+      timeout: 10000, // Увеличиваем таймаут транзакции до 10 секунд
+    });
 
-    } catch (error) {
-      console.error('Ошибка при добавлении товара:', error);
-      console.error('Stack trace:', error.stack);
-      throw error;
-    }
+  } catch (error) {
+    console.error('Ошибка при добавлении товара:', error);
+    console.error('Stack trace:', error.stack);
+    throw error;
   }
+}
 
   async updateOrderItem(
     orderId: string,
@@ -3257,96 +3322,139 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
 
 
   private getOrderInclude() {
-    return {
-      items: {
-        include: {
-          additives: true,
-          product: {
-            include: {
-              category: true,
-              restaurantPrices: {
-                select: {
-                  price: true,
-                  isStopList: true
+  return {
+    items: {
+      include: {
+        additives: true,
+        product: {
+          include: {
+            category: true,
+            restaurantPrices: {
+              select: {
+                price: true,
+                isStopList: true
+              }
+            },
+            additives: true,
+            ingredients: {
+              include: {
+                inventoryItem: true
+              }
+            },
+            workshops: {
+              include: {
+                workshop: true
+              }
+            },
+            // Добавляем информацию о комбо
+            comboItems: {
+              include: {
+                products: {
+                  include: {
+                    product: {
+                      select: {
+                        id: true,
+                        title: true,
+                        price: true,
+                        images: true,
+                        description: true
+                      }
+                    }
+                  }
                 }
-              },
-              additives: true,
-              ingredients: {
-                include: {
-                  inventoryItem: true
-                }
-              },
-              workshops: {
-                include: {
-                  workshop: true
-                }
-              },
-            },
+              }
+            }
           },
-          assignedTo: {
-            select: {
-              id: true,
-              name: true,
-            },
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
           },
-          startedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
+        },
+        startedBy: {
+          select: {
+            id: true,
+            name: true,
           },
-          completedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
+        },
+        completedBy: {
+          select: {
+            id: true,
+            name: true,
           },
-          pausedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
+        },
+        pausedBy: {
+          select: {
+            id: true,
+            name: true,
           },
-          refundedBy: {
-            select: {
-              id: true,
-              name: true,
-            },
+        },
+        refundedBy: {
+          select: {
+            id: true,
+            name: true,
           },
         },
       },
-      customer: true,
-      restaurant: true,
-      shift: true,
-      payment: true,
-      deliveryCourier: {
-        select: {
-          id: true,
-          name: true,
-        }
-      },
-      surcharges: {
-        include: {
-          surcharge: true
-        }
-      },
-      orderOrderAdditives: { 
-        include: {
-          orderAdditive: {
-            include: {
-              network: true,
-              inventoryItem: true
-            }
+    },
+    customer: true,
+    restaurant: true,
+    shift: true,
+    payment: true,
+    deliveryCourier: {
+      select: {
+        id: true,
+        name: true,
+      }
+    },
+    surcharges: {
+      include: {
+        surcharge: true
+      }
+    },
+    orderOrderAdditives: { 
+      include: {
+        orderAdditive: {
+          include: {
+            network: true,
+            inventoryItem: true
           }
         }
       }
-    };
-  }
+    }
+  };
+}
 
-  private mapToResponse(order: any): OrderResponse {
-    const itemsWithTotals = order.items?.map((item: any) => ({
-      ...item,
-      totalPrice: (item.price + (item.additives?.reduce((sum: number, a: any) => sum + a.price, 0) || 0)) * item.quantity,
+private mapToResponse(order: any): OrderResponse {
+  // Обрабатываем все элементы заказа (обычные и комбо)
+  const processedItems = (order.items || []).map((item: any) => {
+    // Обработка информации о комбо для продукта
+    let comboItems = [];
+    
+     if (item.product?.isCombo && item.product?.comboItems) {
+      comboItems = item.product.comboItems.map((comboItem: any) => ({
+        id: comboItem.id,
+        type: comboItem.type,
+        groupName: comboItem.groupName,
+        minSelect: comboItem.minSelect,
+        maxSelect: comboItem.maxSelect,
+        products: comboItem.products?.map((cp: any) => ({
+          id: cp.product.id,
+          title: cp.product.title,
+          price: cp.product.price,
+          image: cp.product.images?.[0],
+          quantity: cp.quantity,
+          additionalPrice: cp.additionalPrice,
+          allowMultiple: cp.allowMultiple,
+          maxQuantity: cp.maxQuantity
+        })) || []
+      }));
+    }
+
+    return {
+      id: item.id,
+      status: item.status,
       isReordered: item.isReordered,
       isRefund: item.isRefund,
       refundReason: item.refundReason,
@@ -3373,155 +3481,202 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
         id: item.refundedBy.id,
         name: item.refundedBy.name,
       } : null,
-    })) || [];
+      assignedTo: item.assignedTo ? {
+        id: item.assignedTo.id,
+        name: item.assignedTo.name,
+      } : null,
+      product: {
+        id: item.product.id,
+        title: item.product.title,
+        price: item.price,
+        image: item.product.images?.[0],
+        workshops: item.product.workshops,
+        ingredients: item.product.ingredients,
+        restaurantPrices: item.product.restaurantPrices,
+        composition: item.product.composition,
+        printLabels: item.product.printLabels,
+        isCombo: item.product.isCombo || false,
+        comboInfo: item.product.isCombo ? {
+          isCombo: true,
+          comboItems: comboItems
+        } : null
+      },
+      quantity: item.quantity,
+      comment: item.comment,
+      additives: item.additives?.map((additive: any) => ({
+        id: additive.id,
+        title: additive.title,
+        price: additive.price,
+      })) || [],
+      totalPrice: (item.price + (item.additives?.reduce((sum: number, a: any) => sum + a.price, 0) || 0)) * item.quantity,
+      // Информация о комбо (для дочерних элементов)
+      parentComboId: item.parentComboId || null,
+      parentOrderItemId: item.parentOrderItemId || null,
+      isComboChild: !!item.parentComboId,
+      // Информация о том, является ли элемент родительским комбо
+      isComboParent: item.product?.isCombo || false,
+      // Для родительского комбо - ID дочерних элементов
+      childItemIds: item.parentComboId 
+        ? null 
+        : (order.items || [])
+            .filter((i: any) => i.parentOrderItemId === item.id)
+            .map((i: any) => i.id)
+    };
+  });
 
-    const orderAdditivesWithTotals = order.orderOrderAdditives?.map((oa: any) => {
-      const basePrice = oa.price * oa.quantity;
-      let totalPrice = basePrice;
+  // Обрабатываем модификаторы заказа
+  const orderAdditivesWithTotals = order.orderOrderAdditives?.map((oa: any) => {
+    const basePrice = oa.price * oa.quantity;
+    let totalPrice = basePrice;
 
-      if (oa.orderAdditive.type === OrderAdditiveType.PER_ITEM) {
-        const itemCount = order.items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0;
-        totalPrice = basePrice * itemCount;
-      } else if (oa.orderAdditive.type === OrderAdditiveType.PER_PERSON) {
-        const personCount = parseInt(order.numberOfPeople || '1');
-        totalPrice = basePrice * personCount;
-      }
-
-      return {
-        ...oa,
-        totalPrice,
-        orderAdditive: {
-          ...oa.orderAdditive,
-          network: oa.orderAdditive.network,
-          inventoryItem: oa.orderAdditive.inventoryItem
-        }
-      };
-    }) || [];
-
-    const itemsTotal = itemsWithTotals.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
-    const orderAdditivesTotal = orderAdditivesWithTotals.reduce((sum: number, oa: any) => sum + oa.totalPrice, 0);
-    const surchargesTotal = order.surcharges?.reduce((sum: number, s: any) => sum + s.amount, 0) || 0;
-
-    const totalPrice = itemsTotal + orderAdditivesTotal + surchargesTotal;
-    const totalItems = itemsWithTotals.reduce((sum: number, item: any) => sum + item.quantity, 0);
+    if (oa.orderAdditive.type === OrderAdditiveType.PER_ITEM) {
+      const itemCount = processedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+      totalPrice = basePrice * itemCount;
+    } else if (oa.orderAdditive.type === OrderAdditiveType.PER_PERSON) {
+      const personCount = parseInt(order.numberOfPeople || '1');
+      totalPrice = basePrice * personCount;
+    }
 
     return {
-      id: order.id,
-      number: order.number,
-      status: order.status,
-      source: order.source,
-      type: order.type,
-      deliveryAddress: order.deliveryAddress,
-      deliveryTime: order.deliveryTime,
-      deliveryNotes: order.deliveryNotes,
-      deliveryEntrance: order.deliveryEntrance,
-      deliveryIntercom: order.deliveryIntercom,
-      deliveryFloor: order.deliveryFloor,
-      deliveryApartment: order.deliveryApartment,
-      deliveryCourierComment: order.deliveryCourierComment,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
-      phone: order.phone,
-      scheduledAt: order.scheduledAt,
-      customerName: order.customerName,
-      comment: order.comment,
-      tableNumber: order.tableNumber,
-      numberOfPeople: order.numberOfPeople,
+      ...oa,
       totalPrice,
-      totalAmount: order.totalAmount,
-      bonusPointsUsed: order.bonusPointsUsed,
-      discountAmount: order.discountAmount,
-      totalItems,
-      restaurantId: order.restaurantId,
-      customer: order.customer ? {
-        id: order.customer.id,
-        name: order.customer.name,
-        phone: order.customer.phone,
-        email: order.customer.email,
-      } : undefined,
-      restaurant: {
-        id: order.restaurant?.id,
-        name: order.restaurant?.name,
-        address: order.restaurant?.address,
-      },
-      personalDiscount: order.personalDiscount ? {
-        id: order.personalDiscount.id,
-        discount: order.personalDiscount.discount,
-        isActive: order.personalDiscount.isActive,
-      } : undefined,
-      items: itemsWithTotals.map(item => ({
-        id: item.id,
-        status: item.status,
-        isReordered: item.isReordered,
-        timestamps: item.timestamps,
-        startedBy: item.startedBy,
-        completedBy: item.completedBy,
-        refundedBy: item.refundedBy,
-        pausedBy: item.pausedBy,
-        isRefund: item.isRefund,
-        refundReason: item.refundReason,
-        assignedTo: item.assignedTo ? {
-          id: item.assignedTo.id,
-          name: item.assignedTo.name,
-        } : null,
-        product: {
-          id: item.product.id,
-          title: item.product.title,
-          price: item.price,
-          image: item.product.images?.[0],
-          workshops: item.product.workshops,
-          ingredients: item.product.ingredients,
-          restaurantPrices: item.product.restaurantPrices,
-          composition: item.product.composition,
-          printLabels: item.product.printLabels
-        },
-        quantity: item.quantity,
-        comment: item.comment,
-        additives: item.additives?.map(additive => ({
-          id: additive.id,
-          title: additive.title,
-          price: additive.price,
-        })) || [],
-      })),
-      orderAdditives: orderAdditivesWithTotals.map(oa => ({
-        id: oa.id,
-        orderAdditiveId: oa.orderAdditiveId,
-        quantity: oa.quantity,
-        price: oa.price,
-        totalPrice: oa.totalPrice,
-        createdAt: oa.createdAt,
-        orderAdditive: {
-          id: oa.orderAdditive.id,
-          title: oa.orderAdditive.title,
-          description: oa.orderAdditive.description,
-          type: oa.orderAdditive.type,
-          network: oa.orderAdditive.network,
-          inventoryItem: oa.orderAdditive.inventoryItem
-        }
-      })),
-      payment: order.payment ? {
-        id: order.payment.id,
-        method: order.payment.method,
-        amount: order.payment.amount,
-        status: order.payment.status,
-        externalId: order.payment.externalId,
-      } : undefined,
-      surcharges: order.surcharges?.map(s => ({
-        id: s.id,
-        surchargeId: s.surchargeId,
-        title: s.surcharge?.title || s.description || 'Надбавка',
-        amount: s.amount,
-        type: s.surcharge?.type || 'FIXED',
-        description: s.description
-      })) || [],
-      attentionFlags: {
-        isReordered: order.isReordered,
-        hasDiscount: order.hasDiscount,
-        discountCanceled: order.discountCanceled,
-        isPrecheck: order.isPrecheck,
-        isRefund: order.isRefund,
-      },
-      table: order.table ? {
+      orderAdditive: {
+        ...oa.orderAdditive,
+        network: oa.orderAdditive.network,
+        inventoryItem: oa.orderAdditive.inventoryItem
+      }
+    };
+  }) || [];
+
+  // Рассчитываем итоговые суммы
+  const itemsTotal = processedItems.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+  const orderAdditivesTotal = orderAdditivesWithTotals.reduce((sum: number, oa: any) => sum + oa.totalPrice, 0);
+  const surchargesTotal = order.surcharges?.reduce((sum: number, s: any) => sum + s.amount, 0) || 0;
+  const totalPrice = itemsTotal + orderAdditivesTotal + surchargesTotal;
+  const totalItems = processedItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+
+  // Подсчет статистики по комбо
+  const comboParents = processedItems.filter(item => item.isComboParent && !item.parentComboId);
+  const comboStats = {
+    totalCombos: comboParents.length,
+    totalComboItems: processedItems.filter(item => item.isComboChild).length,
+    combos: comboParents.map(item => ({
+      id: item.id,
+      title: item.product.title,
+      quantity: item.quantity,
+      childItemsCount: item.childItemIds?.length || 0
+    }))
+  };
+
+  return {
+    id: order.id,
+    number: order.number,
+    status: order.status,
+    source: order.source,
+    type: order.type,
+    deliveryAddress: order.deliveryAddress,
+    deliveryTime: order.deliveryTime,
+    deliveryNotes: order.deliveryNotes,
+    deliveryEntrance: order.deliveryEntrance,
+    deliveryIntercom: order.deliveryIntercom,
+    deliveryFloor: order.deliveryFloor,
+    deliveryApartment: order.deliveryApartment,
+    deliveryCourierComment: order.deliveryCourierComment,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    phone: order.phone,
+    scheduledAt: order.scheduledAt,
+    customerName: order.customerName,
+    comment: order.comment,
+    tableNumber: order.tableNumber,
+    numberOfPeople: order.numberOfPeople,
+    totalPrice,
+    totalAmount: order.totalAmount,
+    bonusPointsUsed: order.bonusPointsUsed,
+    discountAmount: order.discountAmount,
+    totalItems,
+    restaurantId: order.restaurantId,
+    
+    customer: order.customer ? {
+      id: order.customer.id,
+      name: order.customer.name,
+      phone: order.customer.phone,
+      email: order.customer.email,
+    } : undefined,
+    
+    restaurant: {
+      id: order.restaurant?.id,
+      name: order.restaurant?.title || order.restaurant?.name,
+      address: order.restaurant?.address,
+      legalInfo: order.restaurant?.legalInfo,
+      network: order.restaurant?.network ? {
+        id: order.restaurant.network.id,
+        name: order.restaurant.network.name,
+        tenant: order.restaurant.network.tenant ? {
+          domain: order.restaurant.network.tenant.domain,
+          subdomain: order.restaurant.network.tenant.subdomain
+        } : undefined
+      } : undefined
+    },
+    
+    personalDiscount: order.personalDiscount ? {
+      id: order.personalDiscount.id,
+      discount: order.personalDiscount.discount,
+      isActive: order.personalDiscount.isActive,
+    } : undefined,
+    
+    // Все элементы заказа в одном массиве (обычные + комбо)
+    items: processedItems,
+    
+    
+    // Модификаторы заказа
+    orderAdditives: orderAdditivesWithTotals.map(oa => ({
+      id: oa.id,
+      orderAdditiveId: oa.orderAdditiveId,
+      quantity: oa.quantity,
+      price: oa.price,
+      totalPrice: oa.totalPrice,
+      createdAt: oa.createdAt,
+      orderAdditive: {
+        id: oa.orderAdditive.id,
+        title: oa.orderAdditive.title,
+        description: oa.orderAdditive.description,
+        type: oa.orderAdditive.type,
+        network: oa.orderAdditive.network,
+        inventoryItem: oa.orderAdditive.inventoryItem
+      }
+    })),
+    
+    // Платеж
+    payment: order.payment ? {
+      id: order.payment.id,
+      method: order.payment.method,
+      amount: order.payment.amount,
+      status: order.payment.status,
+      externalId: order.payment.externalId,
+    } : undefined,
+    
+    // Надбавки
+    surcharges: order.surcharges?.map(s => ({
+      id: s.id,
+      surchargeId: s.surchargeId,
+      title: s.surcharge?.title || s.description || 'Надбавка',
+      amount: s.amount,
+      type: s.surcharge?.type || 'FIXED',
+      description: s.description
+    })) || [],
+    
+    // Флаги внимания
+    attentionFlags: {
+      isReordered: order.isReordered,
+      hasDiscount: order.hasDiscount,
+      discountCanceled: order.discountCanceled,
+      isPrecheck: order.isPrecheck,
+      isRefund: order.isRefund,
+    },
+    
+    // Информация о столе
+    table: order.table ? {
       id: order.table.id,
       name: order.table.name,
       seats: order.table.seats,
@@ -3536,6 +3691,21 @@ async createOrder(dto: CreateOrderDto): Promise<OrderResponse> {
         color: tt.tag.color,
       })) || [],
     } : null,
-    };
-  }
+
+    // Информация о доставке
+    deliveryCourier: order.deliveryCourier ? {
+      id: order.deliveryCourier.id,
+      name: order.deliveryCourier.name,
+    } : undefined,
+    deliveryStartedAt: order.deliveryStartedAt,
+
+    // Смена
+    shift: order.shift ? {
+      id: order.shift.id,
+      startTime: order.shift.startTime,
+      endTime: order.shift.endTime,
+      status: order.shift.status,
+    } : undefined,
+  };
+}
 }

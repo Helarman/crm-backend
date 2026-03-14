@@ -15,14 +15,14 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   email    String  @unique
-  phone    String? @unique 
+  phone    String? @unique
   password String?
 
   name    String @default("Не указано")
   picture String @default("/")
 
   role          EnumUserRoles          @default(NONE)
-  isBlocked     Boolean                @default(false) 
+  isBlocked     Boolean                @default(false)
   restaurant    Restaurant[]           @relation("RestaurantToUser")
   shifts        UserShift[]            @relation("UserToUserShift")
   assignedItems OrderItem[]            @relation("OrderItemToUser")
@@ -251,20 +251,57 @@ model Product {
 
   restaurantPrices RestaurantProductPrice[] @relation("ProductPrices")
 
-  restaurants Restaurant[] @relation("RestaurantToProduct")
-  category    Category?    @relation(fields: [categoryId], references: [id], name: "ProductToCategory")
-  categoryId  String?      @map("category_id")
-  orderItems  OrderItem[]  @relation("OrderItemToProduct")
+  comboItems        ComboItem[]        @relation("ComboItems")
+  comboItemProducts ComboItemProduct[]
+  isCombo           Boolean            @default(false) @map("is_combo")
+  restaurants       Restaurant[]       @relation("RestaurantToProduct")
+  category          Category?          @relation(fields: [categoryId], references: [id], name: "ProductToCategory")
+  categoryId        String?            @map("category_id")
+  orderItems        OrderItem[]        @relation("OrderItemToProduct")
 
   inventoryItems InventoryItem[]
   ingredients    ProductIngredient[]
 
   productDiscounts ProductDiscount[]
 
-  network   Network? @relation(fields: [networkId], references: [id])
-  networkId String?  @map("network_id")
+  network         Network?    @relation(fields: [networkId], references: [id])
+  networkId       String?     @map("network_id")
+  childOrderItmes OrderItem[] @relation("ComboParent")
 
   @@map("product")
+}
+
+model ComboItem {
+  id        String             @id @default(cuid())
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  comboId   String             @map("combo_id")
+  combo     Product            @relation(fields: [comboId], references: [id], name: "ComboItems")
+  type      ComboItemType      @default(STATIC)
+  minSelect Int                @default(1) @map("min_select")
+  maxSelect Int                @default(1) @map("max_select")
+  groupName String?
+  sortOrder Int                @default(0) @map("sort_order")
+  products  ComboItemProduct[]
+
+  @@map("combo_items")
+}
+
+model ComboItemProduct {
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now()) @map("created_at")
+  comboItemId     String    @map("combo_item_id")
+  comboItem       ComboItem @relation(fields: [comboItemId], references: [id])
+  productId       String    @map("product_id")
+  product         Product   @relation(fields: [productId], references: [id])
+  quantity        Int       @default(1)
+  additionalPrice Int       @default(0) @map("additional_price")
+  allowMultiple   Boolean   @default(false) @map("allow_multiple")
+  maxQuantity     Int?      @map("max_quantity")
+  sortOrder       Int       @default(0) @map("sort_order")
+
+  @@unique([comboItemId, productId])
+  @@map("combo_item_products")
 }
 
 model RestaurantProductPrice {
@@ -458,25 +495,25 @@ model CustomerBonusBalance {
 }
 
 model Order {
-  id          String          @id @default(cuid())
-  source      OrderSource     @default(PANEL)
-  number      String          @unique @map("order_number")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  status      EnumOrderStatus @default(CREATED)
-  type        EnumOrderType   @default(DINE_IN)
-  scheduledAt DateTime?       @map("scheduled_at")
-  tableNumber String?
-  table       Table?          @relation(fields: [tableId], references: [id])
-  tableId     String?         @map("table_id")
-  customer       Customer?  @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
-  customerId     String?    @map("customer_id")
+  id             String          @id @default(cuid())
+  source         OrderSource     @default(PANEL)
+  number         String          @unique @map("order_number")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  status         EnumOrderStatus @default(CREATED)
+  type           EnumOrderType   @default(DINE_IN)
+  scheduledAt    DateTime?       @map("scheduled_at")
+  tableNumber    String?
+  table          Table?          @relation(fields: [tableId], references: [id])
+  tableId        String?         @map("table_id")
+  customer       Customer?       @relation(fields: [customerId], references: [id], name: "OrderToCustomer")
+  customerId     String?         @map("customer_id")
   numberOfPeople String?
-  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
-  restaurantId   String     @map("restaurant_id")
-  phone          String?    @map("phone")
-  shift          Shift?     @relation(fields: [shiftId], references: [id], name: "OrderToShift")
-  shiftId        String?    @map("shift_id")
+  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], name: "OrderToRestaurant")
+  restaurantId   String          @map("restaurant_id")
+  phone          String?         @map("phone")
+  shift          Shift?          @relation(fields: [shiftId], references: [id], name: "OrderToShift")
+  shiftId        String?         @map("shift_id")
 
   items   OrderItem[] @relation("OrderToOrderItem")
   payment Payment?    @relation("OrderToPayment")
@@ -485,14 +522,14 @@ model Order {
   comment        String?
   yandexEdaOrder YandexEdaOrder? @relation("OrderToYandexOrder")
 
-  deliveryAddress String?   @map("delivery_address")
-  deliveryTime    DateTime? @map("delivery_time")
-  deliveryNotes   String?   @map("delivery_notes")
-  deliveryEntrance  String?   @map("delivery_entrance")     // Подъезд
-  deliveryIntercom  String?   @map("delivery_intercom")     // Домофон
-  deliveryFloor     String?   @map("delivery_floor")        // Этаж
-  deliveryApartment String?   @map("delivery_apartment")    // Квартира/офис
-  deliveryCourierComment String? @map("delivery_courier_comment") // Комментарий для курьера
+  deliveryAddress        String?   @map("delivery_address")
+  deliveryTime           DateTime? @map("delivery_time")
+  deliveryNotes          String?   @map("delivery_notes")
+  deliveryEntrance       String?   @map("delivery_entrance") // Подъезд
+  deliveryIntercom       String?   @map("delivery_intercom") // Домофон
+  deliveryFloor          String?   @map("delivery_floor") // Этаж
+  deliveryApartment      String?   @map("delivery_apartment") // Квартира/офис
+  deliveryCourierComment String?   @map("delivery_courier_comment") // Комментарий для курьера
 
   surcharges OrderSurcharge[] @relation("OrderToSurcharge")
 
@@ -516,7 +553,8 @@ model Order {
   personalDiscountId  String?              @map("personal_discount_id")
   personalDiscount    PersonalDiscount?    @relation(fields: [personalDiscountId], references: [id])
   orderOrderAdditives OrderOrderAdditive[]
-  customerName   String?    @map("customer_name")
+  customerName        String?              @map("customer_name")
+
   @@map("orders")
 }
 
@@ -578,6 +616,13 @@ model OrderItem {
   isReordered  Boolean @default(false) @map("is_reordered")
   isRefund     Boolean @default(false) @map("is_refund")
   refundReason String? @map("refund_reason")
+
+  parentCombo   Product? @relation("ComboParent", fields: [parentComboId], references: [id])
+  parentComboId String?  @map("parent_combo_id")
+
+  parentOrderItem   OrderItem? @relation("OrderItemHierarchy", fields: [parentOrderItemId], references: [id])
+  parentOrderItemId String?    @map("parent_order_item_id")
+  childOrderItems   OrderItem[] @relation("OrderItemHierarchy")
 
   @@map("order_items")
 }
@@ -1611,4 +1656,10 @@ enum PaymentProviderType {
   ALFABANK
   SBP
   TINKOFF
+}
+
+enum ComboItemType {
+  STATIC
+  CHOICE
+  OPTIONAL
 }

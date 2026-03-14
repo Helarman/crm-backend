@@ -327,22 +327,76 @@ async updateStockSettings(restaurantId: string, allowNegativeStock: boolean) {
   }
   
   async getRestaurantProducts(restaurantId: string) {
-    const restaurant = await this.prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      include: {
-        products: {
-          include: {
-            category: true,
-            additives: true,
-            restaurantPrices: true,
+  const restaurant = await this.prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    include: {
+      products: {
+        include: {
+          category: true,
+          additives: {
+            include: {
+              inventoryItem: true
+            }
+          },
+          restaurantPrices: true,
+          inventoryItems: true,
+          ingredients: {
+            include: {
+              inventoryItem: true
+            }
+          },
+          // Загрузка комбо-структуры
+          comboItems: {
+            include: {
+              products: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                      additives: {
+                        include: {
+                          inventoryItem: true
+                        }
+                      },
+                      restaurantPrices: true,
+                      inventoryItems: true,
+                      ingredients: {
+                        include: {
+                          inventoryItem: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          // Явно указываем, что это комбо, если isCombo = true
+          childOrderItmes: false, // Не загружаем, если не нужно для отображения
+          
+          // Дополнительные связи, которые могут понадобиться
+          productDiscounts: {
+            include: {
+              discount: true
+            }
+          },
+          workshops: {
+            include: {
+              workshop: true
+            }
           }
         }
       }
-    });
+    }
+  });
 
-    if (!restaurant) throw new NotFoundException('Ресторан не найден');
-    return restaurant.products;
-  }
+  if (!restaurant) throw new NotFoundException('Ресторан не найден');
+  
+  // Дополнительная обработка для комбо-продуктов
+  const products = restaurant.products
+  
+  return products;
+}
 
   async getRestaurantsByUserAndNetwork(userId: string, networkId: string) {
   const user = await this.prisma.user.findUnique({

@@ -21,6 +21,8 @@ export class ProductDto {
   content?: string;
   additives?: string[];  
   networkId?: string;
+  isCombo?: boolean;
+  childProductIds?: string[];
   clientSortOrder?: number
   restaurantPrices?: {
     restaurantId: string;
