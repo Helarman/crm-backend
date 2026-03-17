@@ -18,6 +18,16 @@ async createCombo(dto: CreateComboDto) {
   this.validateComboItems(dto.items);
   await this.validateProductsInItems(dto.items);
 
+  // Проверяем существование сети, если она указана
+  if (dto.networkId) {
+    const network = await this.prisma.network.findUnique({
+      where: { id: dto.networkId }
+    });
+    
+    if (!network) {
+      throw new NotFoundException('Сеть не найдена');
+    }
+  }
 
   // Создаем комбо в транзакции
   return this.prisma.$transaction(async (tx) => {
@@ -26,11 +36,14 @@ async createCombo(dto: CreateComboDto) {
         title: dto.title,
         description: dto.description || '',
         price: dto.price,
-        isCombo: true, // ВАЖНО: добавляем это поле
+        isCombo: true,
         isUsed: true,
         images: dto.images || [],
         categoryId: dto.categoryId,
         networkId: dto.networkId,
+        // Добавляем поля для сортировки, если нужно
+        sortOrder: dto.sortOrder,
+        clientSortOrder: dto.clientSortOrder,
         // Связи через отдельные create для many-to-many
         workshops: dto.workshopIds ? {
           create: dto.workshopIds.map(id => ({
@@ -72,7 +85,20 @@ async createCombo(dto: CreateComboDto) {
       }
     }
 
-    return ;
+    // СОЗДАЕМ ЦЕНЫ ДЛЯ РЕСТОРАНОВ - добавляем эту логику
+    if (dto.restaurantPrices?.length) {
+      await tx.restaurantProductPrice.createMany({
+        data: dto.restaurantPrices.map(rp => ({
+          productId: combo.id,
+          restaurantId: rp.restaurantId,
+          price: rp.price,
+          isStopList: rp.isStopList ?? false,
+        })),
+      });
+    }
+
+    // Возвращаем созданное комбо с полной информацией
+    return this.getComboById(combo.id);
   });
 }
 
@@ -82,7 +108,7 @@ async updateCombo(id: string, dto: UpdateComboDto) {
 
   return this.prisma.$transaction(async (tx) => {
     // Обновляем основные поля
-    if (dto.title || dto.description !== undefined || dto.price !== undefined || dto.images) {
+    if (dto.title || dto.description !== undefined || dto.price !== undefined || dto.images || dto.sortOrder || dto.clientSortOrder) {
       await tx.product.update({
         where: { id },
         data: {
@@ -90,6 +116,8 @@ async updateCombo(id: string, dto: UpdateComboDto) {
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.price !== undefined && { price: dto.price }),
           ...(dto.images && { images: dto.images }),
+          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+          ...(dto.clientSortOrder !== undefined && { clientSortOrder: dto.clientSortOrder }),
           ...(dto.categoryId !== undefined && { 
             categoryId: dto.categoryId || null 
           })
@@ -143,6 +171,26 @@ async updateCombo(id: string, dto: UpdateComboDto) {
             }))
           });
         }
+      }
+    }
+
+    // ОБНОВЛЯЕМ ЦЕНЫ ДЛЯ РЕСТОРАНОВ
+    if (dto.restaurantPrices) {
+      // Удаляем старые цены
+      await tx.restaurantProductPrice.deleteMany({
+        where: { productId: id },
+      });
+
+      // Создаем новые цены
+      if (dto.restaurantPrices.length > 0) {
+        await tx.restaurantProductPrice.createMany({
+          data: dto.restaurantPrices.map(rp => ({
+            productId: id,
+            restaurantId: rp.restaurantId,
+            price: rp.price,
+            isStopList: rp.isStopList ?? false,
+          })),
+        });
       }
     }
 

@@ -161,6 +161,13 @@ export class CreateComboDto {
   @IsArray()
   @IsString({ each: true })
   additives?: string[];
+     restaurantPrices?: {
+    restaurantId: string;
+    price: number;
+    isStopList: boolean;
+  }[];
+  sortOrder?: number
+clientSortOrder?: number
 }
 
 export class UpdateComboDto {
@@ -173,7 +180,8 @@ export class UpdateComboDto {
   @IsOptional()
   @IsString()
   description?: string;
-
+sortOrder?: number
+clientSortOrder?: number
   @ApiProperty({ description: 'Базовая цена комбо', required: false })
   @IsOptional()
   @IsNumber()
@@ -209,6 +217,12 @@ export class UpdateComboDto {
   @IsArray()
   @IsString({ each: true })
   additives?: string[];
+
+   restaurantPrices?: {
+    restaurantId: string;
+    price: number;
+    isStopList: boolean;
+  }[];
 }
 
 // DTO для заказа комбо
