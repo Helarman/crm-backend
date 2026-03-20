@@ -97,8 +97,7 @@ async createCombo(dto: CreateComboDto) {
       });
     }
 
-    // Возвращаем созданное комбо с полной информацией
-    return this.getComboById(combo.id);
+    return;
   });
 }
 
